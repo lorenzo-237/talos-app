@@ -1,0 +1,65 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "test-build (debug)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "tsx",
+        "--tsconfig",
+        "${workspaceFolder}/tsconfig.json",
+        "${workspaceFolder}/scripts/test-build.ts"
+      ],
+      "args": [
+        "--package",
+        "${input:packagePath}",
+        "--version",
+        "${input:version}"
+      ],
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env.local",
+      "sourceMaps": true,
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "test-build (hardcoded)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "tsx",
+        "--tsconfig",
+        "${workspaceFolder}/tsconfig.json",
+        "${workspaceFolder}/scripts/test-build.ts"
+      ],
+      "args": [
+        "--package",
+        "data/packages/3.3.3/standard.json",
+        "--version",
+        "3.3.3.1"
+      ],
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env.local",
+      "sourceMaps": true,
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+      "console": "integratedTerminal"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "packagePath",
+      "type": "promptString",
+      "description": "Path to package JSON (relative to project root)",
+      "default": "data/packages/3.3.3/standard.json"
+    },
+    {
+      "id": "version",
+      "type": "promptString",
+      "description": "Version (e.g. 3.3.3.1)",
+      "default": "3.3.3.1"
+    }
+  ]
+}
