@@ -46,6 +46,7 @@ export default function BuildPage() {
   const [hasErrors, setHasErrors] = React.useState(false)
   const [autoScroll, setAutoScroll] = React.useState(true)
   const [logFilter, setLogFilter] = React.useState<LogFilter>("all")
+  const [keepTemp, setKeepTemp] = React.useState(false)
   const logScrollRef = React.useRef<HTMLDivElement>(null)
   // Prevents the programmatic scroll from triggering the "user scrolled up" path
   const isProgrammaticScroll = React.useRef(false)
@@ -115,6 +116,7 @@ export default function BuildPage() {
         body: JSON.stringify({
           version: version.trim(),
           packages: [...selectedPackages],
+          keepTemp,
         }),
       })
 
@@ -282,6 +284,20 @@ export default function BuildPage() {
                 </label>
               </div>
             ))}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="keep-temp"
+              checked={keepTemp}
+              onCheckedChange={(v) => setKeepTemp(v === true)}
+            />
+            <label
+              htmlFor="keep-temp"
+              className="cursor-pointer text-sm text-muted-foreground"
+            >
+              Conserver les dossiers temporaires
+            </label>
           </div>
 
           <Button

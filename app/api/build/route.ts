@@ -16,6 +16,7 @@ const activeBuilds = new Set<string>()
 const buildSchema = z.object({
   version: z.string().min(1),
   packages: z.array(z.string()).min(1),
+  keepTemp: z.boolean().optional().default(false),
 })
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "Invalid request", details: parsed.error.format() }, { status: 400 })
     }
 
-    const { version, packages } = parsed.data
+    const { version, packages, keepTemp } = parsed.data
 
     let resolved
     try {
@@ -81,7 +82,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           }
 
           try {
-            await buildPackage(pkgDef, resolved.resolvedVersion, version, env.SRC_DIR, env.OUTPUT_DIR, logger)
+            await buildPackage(pkgDef, resolved.resolvedVersion, version, env.SRC_DIR, env.OUTPUT_DIR, logger, keepTemp)
           } catch (err) {
             logger.error(`Package "${pkgName}" failed: ${err}`)
             if (finalStatus === "success") finalStatus = "partial"

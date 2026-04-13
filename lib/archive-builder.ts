@@ -28,9 +28,11 @@ async function processDirectoryNode(
   srcDir: string,
   destDir: string,
   logger: BuildLogger,
-  installMode = false  // when true, srcDir base is SRC_DIR/install/
+  installMode = false // when true, srcDir base is SRC_DIR/install/
 ): Promise<void> {
-  const resolvedName = node.name ? resolvePlaceholders(node.name, version) : undefined
+  const resolvedName = node.name
+    ? resolvePlaceholders(node.name, version)
+    : undefined
 
   // Determine target directory
   let target: string
@@ -45,8 +47,16 @@ async function processDirectoryNode(
   // C. Copy base source directory (only if name is defined)
   if (resolvedName) {
     const baseDir = installMode
-      ? path.join(srcDir, "directories", ...path.normalize(resolvedName).split(path.sep))
-      : path.join(srcDir, "directories", ...path.normalize(resolvedName).split(path.sep))
+      ? path.join(
+          srcDir,
+          "directories",
+          ...path.normalize(resolvedName).split(path.sep)
+        )
+      : path.join(
+          srcDir,
+          "directories",
+          ...path.normalize(resolvedName).split(path.sep)
+        )
     if (await pathExists(baseDir)) {
       try {
         await copyDir(baseDir, target)
@@ -97,8 +107,13 @@ async function processDirectoryNode(
   if (node.files) {
     for (const filePath of node.files) {
       const resolvedFilePath = resolvePlaceholders(filePath, version)
-      const filesDir = installMode ? path.join(srcDir, "files") : path.join(srcDir, "files")
-      const srcFile = path.join(filesDir, ...path.normalize(resolvedFilePath).split(path.sep))
+      const filesDir = installMode
+        ? path.join(srcDir, "files")
+        : path.join(srcDir, "files")
+      const srcFile = path.join(
+        filesDir,
+        ...path.normalize(resolvedFilePath).split(path.sep)
+      )
       const fileName = path.basename(resolvedFilePath)
       const destFile = path.join(target, fileName)
       if (await pathExists(srcFile)) {
@@ -132,7 +147,14 @@ async function processDirectoryNode(
   // H. child directories (recursive)
   if (node.directories) {
     for (const child of node.directories) {
-      await processDirectoryNode(child, version, srcDir, target, logger, installMode)
+      await processDirectoryNode(
+        child,
+        version,
+        srcDir,
+        target,
+        logger,
+        installMode
+      )
     }
   }
 }
@@ -146,7 +168,8 @@ async function buildArchive(
   version: string,
   srcDir: string,
   tempDir: string,
-  logger: BuildLogger
+  logger: BuildLogger,
+  keepTemp = false
 ): Promise<void> {
   logger.log(`Building archive: ${archiveDef.name}.${archiveDef.extension}`)
 
@@ -156,7 +179,7 @@ async function buildArchive(
   // 1. Build nested archives first (their .7z goes into stagingDir)
   if (archiveDef.archives && archiveDef.archives.length > 0) {
     for (const nested of archiveDef.archives) {
-      await buildArchive(nested, version, srcDir, stagingDir, logger)
+      await buildArchive(nested, version, srcDir, stagingDir, logger, keepTemp)
     }
   }
 
@@ -171,12 +194,21 @@ async function buildArchive(
   await processDirectoryNode(node, version, srcDir, stagingDir, logger)
 
   // 3. Create the .7z archive
-  const archivePath = path.join(tempDir, `${archiveDef.name}.${archiveDef.extension}`)
+  const archivePath = path.join(
+    tempDir,
+    `${archiveDef.name}.${archiveDef.extension}`
+  )
   logger.log(`Compressing: ${archiveDef.name}.${archiveDef.extension}`)
-  await execa("7z", ["a", "-sccUTF-8", archivePath, path.join(stagingDir, "*")], { shell: true })
+  await execa(
+    "7z",
+    ["a", "-sccUTF-8", archivePath, path.join(stagingDir, "*")],
+    { shell: true }
+  )
 
-  // 4. Remove staging dir after successful compression
-  await fs.rm(stagingDir, { recursive: true, force: true })
+  // 4. Remove staging dir after successful compression (unless keepTemp)
+  if (!keepTemp) {
+    await fs.rm(stagingDir, { recursive: true, force: true })
+  }
 }
 
 /**
@@ -195,13 +227,20 @@ async function processInstallSection(
   if (installSection.files) {
     for (const filePath of installSection.files) {
       const resolvedFilePath = resolvePlaceholders(filePath, version)
-      const srcFile = path.join(srcDir, "install", "files", ...path.normalize(resolvedFilePath).split(path.sep))
+      const srcFile = path.join(
+        srcDir,
+        "install",
+        "files",
+        ...path.normalize(resolvedFilePath).split(path.sep)
+      )
       const destFile = path.join(destDir, path.basename(resolvedFilePath))
       if (await pathExists(srcFile)) {
         try {
           await copyFile(srcFile, destFile)
         } catch (err) {
-          logger.warn(`Could not copy install file "${resolvedFilePath}": ${err}`)
+          logger.warn(
+            `Could not copy install file "${resolvedFilePath}": ${err}`
+          )
         }
       } else {
         logger.warn(`Install file not found: ${srcFile}`)
@@ -229,7 +268,14 @@ async function processInstallSection(
   if (installSection.directories) {
     const installSrcDir = path.join(srcDir, "install")
     for (const node of installSection.directories) {
-      await processDirectoryNode(node, version, installSrcDir, destDir, logger, true)
+      await processDirectoryNode(
+        node,
+        version,
+        installSrcDir,
+        destDir,
+        logger,
+        true
+      )
     }
   }
 }
@@ -243,7 +289,8 @@ export async function buildPackage(
   inputVersion: string,
   srcDir: string,
   outputDir: string,
-  logger: BuildLogger
+  logger: BuildLogger,
+  keepTemp = false
 ): Promise<void> {
   const { v4: uuidv4 } = await import("uuid")
   const tempDir = path.join(outputDir, `TEMP_${uuidv4()}`)
@@ -260,7 +307,14 @@ export async function buildPackage(
     for (let i = 0; i < packageDef.archives.length; i++) {
       const archive = packageDef.archives[i]
       try {
-        await buildArchive(archive, inputVersion, srcDir, tempDir, logger)
+        await buildArchive(
+          archive,
+          inputVersion,
+          srcDir,
+          tempDir,
+          logger,
+          keepTemp
+        )
       } catch (err) {
         logger.error(`Failed to build archive "${archive.name}": ${err}`)
         throw err
@@ -271,7 +325,13 @@ export async function buildPackage(
     // Process install section
     if (packageDef.install) {
       logger.log("Processing install section...")
-      await processInstallSection(packageDef.install, inputVersion, srcDir, tempDir, logger)
+      await processInstallSection(
+        packageDef.install,
+        inputVersion,
+        srcDir,
+        tempDir,
+        logger
+      )
     }
 
     // Move temp dir to final output location (atomic-ish)
@@ -282,7 +342,9 @@ export async function buildPackage(
     logger.log(`Build complete. Output: ${outputPackageDir}`)
   } catch (err) {
     // Cleanup on failure
-    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {})
+    if (!keepTemp) {
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {})
+    }
     throw err
   }
 }
