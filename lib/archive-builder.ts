@@ -173,7 +173,7 @@ async function buildArchive(
   // 3. Create the .7z archive
   const archivePath = path.join(tempDir, `${archiveDef.name}.${archiveDef.extension}`)
   logger.log(`Compressing: ${archiveDef.name}.${archiveDef.extension}`)
-  await execa("7z", ["a", archivePath, path.join(stagingDir, "*")], { shell: true })
+  await execa("7z", ["a", "-sccUTF-8", archivePath, path.join(stagingDir, "*")], { shell: true })
 
   // 4. Remove staging dir after successful compression
   await fs.rm(stagingDir, { recursive: true, force: true })

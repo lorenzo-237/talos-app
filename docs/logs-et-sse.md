@@ -1,82 +1,104 @@
-# Logs et streaming SSE
+# Logs et streaming en temps réel
 
-## Vue d'ensemble
+## C'est quoi SSE ?
 
-Le système de logs repose sur deux éléments : un accumulateur en mémoire (`BuildLogger`) et une route SSE (`/api/build-stream`) qui diffuse les entrées en temps réel au client.
+SSE (Server-Sent Events) est une connexion HTTP qui reste **ouverte** après la
+requête. Le serveur peut y envoyer des messages au fur et à mesure, sans que le
+client ait besoin de re-demander. C'est plus simple qu'un WebSocket : c'est
+unidirectionnel (serveur → client uniquement), et ça utilise une URL classique.
 
-## Flux complet
+---
+
+## Comment ça marche dans ce projet
+
+### Étape 1 — Lancer le build
+
+Le client envoie `POST /api/build`. Le serveur :
+
+1. Crée un `BuildLogger` (l'objet qui va collecter tous les logs)
+2. L'enregistre dans un registre global sous un identifiant unique (`buildId`)
+3. Lance le build **en arrière-plan** (sans attendre qu'il finisse)
+4. Répond immédiatement avec le `buildId`
+
+### Étape 2 — Se connecter au stream
+
+Le client ouvre une connexion SSE vers `GET /api/build-stream?buildId=xxx`.
+
+La route récupère le `BuildLogger` depuis le registre et **s'y abonne** : elle
+enregistre un callback qui sera appelé à chaque nouveau log. Ce callback écrit
+le log dans la connexion HTTP ouverte vers le client.
+
+Si le client se connecte avec du retard (ex. rechargement de page), tous les logs
+déjà enregistrés lui sont renvoyés d'un coup en "replay", puis les nouveaux arrivent
+en temps réel.
+
+### Étape 3 — Recevoir les logs
+
+Le client lit les messages via `EventSource.onmessage`. Chaque message est un log
+au format JSON :
+
+```ts
+{ type: "log" | "warning" | "error" | "progress" | "done", message: "...", timestamp: "..." }
+```
+
+Quand le client reçoit `type: "done"`, il ferme la connexion.
+
+---
+
+## Le pattern Observer (publish/subscribe)
+
+C'est le mécanisme interne du `BuildLogger`. Il permet à plusieurs parties du code
+de réagir aux logs sans se connaître.
+
+```
+buildPackage → logger.log("Compression...")
+                  → emit()
+                     → notifie chaque listener enregistré
+                          → [listener de build-stream] → écrit dans le stream HTTP
+                               → EventSource.onmessage → affiché dans le browser
+```
+
+- **`logger.subscribe(callback)`** — ajoute un listener (un abonné)
+- **`logger.log/warn/error/...`** — publie un message à tous les abonnés
+- Le callback retourné par `subscribe()` sert à se désabonner
+
+Si deux clients SSE se connectent au même `buildId`, il y a deux listeners dans
+le tableau — chacun reçoit tous les logs.
+
+---
+
+## Le registre global (`buildRegistry`)
+
+C'est une `Map` qui associe chaque `buildId` à son `BuildLogger`. Elle est
+partagée entre toutes les routes API du même processus Node.js.
+
+```ts
+buildRegistry.set(buildId, logger)  // dans /api/build
+buildRegistry.get(buildId)          // dans /api/build-stream
+```
+
+Les loggers sont purgés automatiquement après 1h.
+
+> **Pourquoi `globalThis` ?** Avec Turbopack en dev, chaque route API peut être
+> compilée comme un module séparé, ce qui crée plusieurs instances de la Map.
+> Ancrer le registre sur `globalThis` garantit qu'il n'en existe qu'une seule,
+> peu importe les rechargements. Voir [globalThis-singleton.md](./globalThis-singleton.md).
+
+---
+
+## Cycle de vie d'un build
 
 ```
 POST /api/build
-  → crée un BuildLogger
-  → l'enregistre dans buildRegistry sous un buildId (UUID)
-  → lance le build en arrière-plan (sans await)
-  → retourne immédiatement { buildId }
+  → buildId créé (UUID)
+  → BuildLogger créé et enregistré
+  → build démarre en arrière-plan
 
-Client
-  → se connecte à GET /api/build-stream?buildId=xxx
-  → reçoit les entrées déjà accumulées en replay
-  → puis reçoit les nouvelles entrées en temps réel via SSE
-  → ferme la connexion à la réception de l'entrée type="done"
+GET /api/build-stream?buildId=xxx
+  → logger récupéré depuis le registre
+  → stream SSE ouvert, logs envoyés en temps réel
+
+event type="done" reçu
+  → client ferme la connexion SSE
+  → logger conservé encore 1h puis purgé
 ```
-
-## BuildLogger (`lib/build-logger.ts`)
-
-Classe par instance de build. Elle expose :
-
-| Méthode | LogType émis |
-|---|---|
-| `log(message)` | `"log"` |
-| `warn(message)` | `"warning"` |
-| `error(message)` | `"error"` |
-| `progress(current, total)` | `"progress"` |
-| `done()` | `"done"` — marque isDone=true |
-
-Chaque entrée est une `LogEntry` :
-```ts
-{ type, message, timestamp: ISO8601, progress?: { current, total } }
-```
-
-Les entrées sont stockées dans un tableau interne `entries[]` **et** diffusées immédiatement aux `listeners[]` abonnés.
-
-`subscribe(listener)` retourne une fonction de désabonnement — le pattern observer classique.
-
-## buildRegistry — registre global
-
-```ts
-const registry = new Map<string, BuildLogger>()
-```
-
-Partagé entre les appels de routes API au sein du même processus Next.js. À chaque `set()`, les loggers âgés de plus d'une heure sont purgés automatiquement.
-
-> **Contrainte Next.js** : le registre est en mémoire de processus. En production avec plusieurs workers (PM2 cluster, plusieurs instances), chaque worker a son propre registre. Avec Turbopack dev (`npm run dev`), un seul processus — pas de problème.
-
-## Route SSE (`app/api/build-stream/route.ts`)
-
-Utilise la Web Streams API (`ReadableStream`) plutôt que `node:stream` pour rester compatible avec l'Edge Runtime de Next.js.
-
-```
-start(controller)
-  1. Replay : enqueue toutes les entries déjà présentes dans logger.allEntries
-  2. Si logger.isDone → close() et retour (build déjà terminé)
-  3. Sinon : logger.subscribe() pour enqueuer les futures entries
-     → à la réception de type="done" : unsubscribe + close()
-```
-
-Format SSE standard :
-```
-data: {"type":"log","message":"...","timestamp":"..."}\n\n
-```
-
-Headers requis : `Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`.
-
-## Côté client
-
-Le client crée un `EventSource` pointant sur `/api/build-stream?buildId=xxx`. Chaque message est parsé via `JSON.parse(event.data)` pour obtenir une `LogEntry` affichée en temps réel dans le panneau de logs.
-
-## Cycle de vie d'un buildId
-
-1. Créé par `POST /api/build` → UUID v4
-2. Enregistré dans `buildRegistry` au démarrage du build
-3. Conservé 1h maximum (nettoyage lazy au prochain `set()`)
-4. L'historique (`lib/history.ts`) persiste le `buildId` sur disque pour le rejouer depuis `/history`

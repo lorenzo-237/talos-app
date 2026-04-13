@@ -10,7 +10,7 @@ function ThemeProvider({
   return (
     <NextThemesProvider
       attribute="class"
-      defaultTheme="system"
+      defaultTheme="light"
       enableSystem
       disableTransitionOnChange
       {...props}
@@ -44,6 +44,10 @@ function ThemeHotkey() {
       }
 
       if (event.metaKey || event.ctrlKey || event.altKey) {
+        return
+      }
+
+      if (!event.key) {
         return
       }
 

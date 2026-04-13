@@ -60,8 +60,17 @@ export class BuildLogger {
   }
 }
 
-// Global registry — shared across API route calls within the same Next.js process
-const registry = new Map<string, BuildLogger>()
+// Anchor the registry on globalThis so it survives Turbopack/HMR module
+// re-instantiation in development — each route gets its own module instance
+// but they all share the same globalThis.
+declare global {
+  // eslint-disable-next-line no-var
+  var __buildRegistry: Map<string, BuildLogger> | undefined
+}
+
+const registry: Map<string, BuildLogger> =
+  globalThis.__buildRegistry ?? new Map()
+globalThis.__buildRegistry = registry
 
 export const buildRegistry = {
   set(id: string, logger: BuildLogger): void {
