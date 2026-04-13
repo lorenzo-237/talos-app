@@ -75,7 +75,7 @@ L'application permet de générer automatiquement des archives `.7z` versionnée
 | Éditeur JSON      | **Monaco Editor** (via `@monaco-editor/react`) | Coloration syntaxique, validation JSON             |
 | Compression       | appel CLI `7z` via `execa`                     | Création d'archives `.7z`                          |
 | Logs temps réel   | **Server-Sent Events (SSE)**                   | Simple, natif HTTP, pas besoin de WebSocket        |
-| Gestion d'état    | **Zustand** ou `useState`/`useContext`         | Léger, suffisant pour ce cas d'usage               |
+| Gestion d'état    | `useState`/`useContext`                        | Léger, suffisant pour ce cas d'usage               |
 | Validation schéma | **Zod**                                        | Validation des JSON de packages et des entrées API |
 | INI files         | **ini** (npm package)                          | Sérialisation/lecture de fichiers `.ini`           |
 | Gestion fichiers  | **fs/promises** (Node.js natif)                | Lecture/écriture/suppression de fichiers           |
@@ -565,7 +565,7 @@ processInstallSection(installSection, version, srcDir, outputDir)
 
 ### 9.5 Traitement des fichiers `.ini`
 
-Les fichiers `.ini` **ne sont pas générés de zéro**. Ils sont **copiés depuis `SRC_DIR/files/inis/`** puis les valeurs définies dans le JSON sont **remplacées dans le fichier copié**. Le reste du fichier (clés fixes, sections non mentionnées) est conservé tel quel.
+Les fichiers `.ini` **ne sont pas générés de zéro**. Ils sont **copiés depuis `SRC_DIR/inis/`** puis les valeurs définies dans le JSON sont **remplacées dans le fichier copié**. Le reste du fichier (clés fixes, sections non mentionnées) est conservé tel quel.
 
 ```ts
 // src/lib/ini-generator.ts
@@ -576,7 +576,7 @@ async function processIni(
   srcDir: string,
   destPath: string
 ): Promise<void> {
-  // 1. Copier SRC_DIR/files/inis/{iniDef.name} vers destPath
+  // 1. Copier SRC_DIR/inis/{iniDef.name} vers destPath
   // 2. Lire le fichier copié et le parser (package npm `ini`)
   // 3. Pour chaque section/clé définie dans iniDef.sections :
   //      - Résoudre les placeholders dans la valeur
@@ -586,7 +586,7 @@ async function processIni(
 }
 ```
 
-**Exemple** : `SRC_DIR/files/inis/NEWVERSION.INI` contient :
+**Exemple** : `SRC_DIR/inis/NEWVERSION.INI` contient :
 
 ```ini
 [MEDOC]

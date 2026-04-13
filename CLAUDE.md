@@ -61,7 +61,7 @@ These are validated at runtime via Zod in `lib/env.ts`. All paths must use forwa
 - **`placeholder-resolver.ts`** — Resolves `{version}`, `{version-1}` through `{version-4}` in strings; `{version-N}` = first N segments joined with dots
 - **`archive-builder.ts`** — Main build orchestrator: creates temp dir, builds archives recursively, processes install section, cleans up
 - **`source-resolver.ts`** — Resolves source file paths in SRC_DIR
-- **`ini-generator.ts`** — Copies `.ini` from `SRC_DIR/files/inis/`, then patches specific keys using the `ini` npm package (preserves unchanged keys)
+- **`ini-generator.ts`** — Copies `.ini` from `SRC_DIR/inis/`, then patches specific keys using the `ini` npm package (preserves unchanged keys)
 - **`build-logger.ts`** — In-memory log accumulator (Map<buildId, LogEntry[]>) that feeds SSE; entries cleaned after 1h
 
 ### Types (`types/`)
@@ -79,7 +79,7 @@ These are validated at runtime via Zod in `lib/env.ts`. All paths must use forwa
 
 **`onlyContent: true`**: skips creating a subdirectory; copies source content directly into the current destination. Can be combined with `name` (reads from that source path) or without `name` (operates at current root).
 
-**INI files**: copied from `SRC_DIR/files/inis/` then specific keys are patched. Only listed keys are modified; the rest of the file is preserved.
+**INI files**: copied from `SRC_DIR/inis/` then specific keys are patched. Only listed keys are modified; the rest of the file is preserved.
 
 **SSE streaming**: `POST /api/build` starts the build in the background and returns a `buildId`. Client connects to `GET /api/build-stream?buildId=xxx` to receive log events (`log`, `warning`, `error`, `progress`, `done`).
 

@@ -10,7 +10,7 @@ export async function processIni(
   srcDir: string,
   destPath: string
 ): Promise<void> {
-  const sourcePath = path.join(srcDir, "files", "inis", iniDef.name)
+  const sourcePath = path.join(srcDir, "inis", iniDef.name)
 
   // Copy source INI to destination
   await fs.mkdir(path.dirname(destPath), { recursive: true })
