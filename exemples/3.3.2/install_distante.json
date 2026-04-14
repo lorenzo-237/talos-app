@@ -1,0 +1,33 @@
+{
+  "output": "INSTALL_DISTANTE",
+  "install": {
+    "files": ["MedocInstallation.exe"],
+    "wdlls": [{ "version": 27 }],
+    "directories": [{ "name": "polices_medoc" }]
+  },
+  "archives": [
+    {
+      "name": "MedocDistant",
+      "extension": "7z",
+      "wdlls": [],
+      "archives": [],
+      "directories": [
+        {
+          "onlyContent": true,
+          "directories": [
+            {
+              "name": "Medoc",
+              "wdlls": [{ "version": 27 }],
+              "onlyContent": true,
+              "directories": [{ "name": "{version-3}\\Medoc", "onlyContent": true }],
+              "dlls": [{ "name": "core" }, { "name": "{version-3}" }]
+            },
+            { "name": "Package" }
+          ]
+        }
+      ],
+      "files": [],
+      "inis": []
+    }
+  ]
+}

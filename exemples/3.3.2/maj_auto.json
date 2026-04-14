@@ -1,0 +1,111 @@
+{
+  "output": "MAJ_AUTO",
+  "install": { "files": [], "wdlls": [] },
+  "archives": [
+    {
+      "name": "PackageInstall",
+      "extension": "7z",
+      "wdlls": [{ "version": 27 }],
+      "directories": [],
+      "files": [
+        "{version-2}\\InstallMaj.exe",
+        "{version-2}\\InstallServeur.exe"
+      ],
+      "inis": [
+        {
+          "name": "InstallMaj.ini",
+          "sections": [
+            {
+              "name": "MEDOC",
+              "keys": [
+                { "name": "VERSION", "value": "{version}" },
+                { "name": "PATCH", "value": "0" },
+                { "name": "SERVEUR", "value": "1" }
+              ]
+            }
+          ]
+        }
+      ],
+      "archives": [
+        {
+          "name": "InstallMAJ",
+          "extension": "7z",
+          "wdlls": [],
+          "archives": [],
+          "directories": [
+            {
+              "name": "{version}",
+              "directories": [
+                {
+                  "name": "Medoc",
+                  "wdlls": [{ "version": 27 }],
+                  "directories": [
+                    { "name": "{version-3}\\Medoc", "onlyContent": true }
+                  ],
+                  "dlls": [{ "name": "core" }, { "name": "{version-3}" }]
+                },
+                { "name": "Modeles" },
+                {
+                  "name": "Tbl_Paramètres",
+                  "directories": [
+                    {
+                      "name": "{version-3}\\Tbl_Paramètres",
+                      "onlyContent": true
+                    }
+                  ]
+                }
+              ],
+              "files": ["{version-2}\\_HFCS.ZIP"]
+            }
+          ],
+          "files": [
+            "{version-2}\\Install.exe",
+            "JournalEvenement.wdk",
+            "Maj_Calcul_Contrat.exe",
+            "{version-2}\\Medoc_Service.exe",
+            "{version-2}\\Medoc_Service_Gestion.exe",
+            "MessageMap.dll"
+          ],
+          "inis": [
+            {
+              "name": "NEWVERSION.INI",
+              "sections": [
+                {
+                  "name": "MEDOC",
+                  "keys": [{ "name": "VERSION", "value": "{version}" }]
+                },
+                {
+                  "name": "HFSQL",
+                  "keys": [
+                    { "name": "MAJEUR", "value": "29" },
+                    { "name": "MINEUR", "value": "0" }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "VERSION.INI",
+              "sections": [
+                {
+                  "name": "VERSION",
+                  "keys": [
+                    { "name": "MEDOC", "value": "{version}" },
+                    { "name": "SERVEUR", "value": "90A290076c" },
+                    { "name": "MANTA", "value": "29.0.134.0" }
+                  ]
+                },
+                {
+                  "name": "HFSQL",
+                  "keys": [
+                    { "name": "MAJEUR", "value": "29" },
+                    { "name": "MINEUR", "value": "0" }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
