@@ -36,4 +36,4 @@ pnpm-debug.log*
 next-env.d.ts
 
 # fichiers générés
-/data/history.json
+/data

@@ -7,7 +7,7 @@ import { env } from "@/lib/env"
 import { resolvePackageFolder } from "@/lib/version-resolver"
 import { BuildLogger, buildRegistry } from "@/lib/build-logger"
 import { buildPackage } from "@/lib/archive-builder"
-import { appendHistory, updateHistoryRecord } from "@/lib/history"
+import { appendHistory, updateHistoryRecord, saveBuildLogs } from "@/lib/history"
 import type { BuildStatus } from "@/types/build"
 
 // Simple concurrency guard — prevents double-building same version+package
@@ -115,6 +115,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           status: finalStatus,
           endedAt: new Date().toISOString(),
         })
+        await saveBuildLogs(buildId, logger.allEntries)
       }
     })()
 

@@ -1,8 +1,12 @@
 import fs from "fs/promises"
 import path from "path"
-import type { BuildRecord } from "@/types/build"
+import type { BuildRecord, LogEntry } from "@/types/build"
 
 const HISTORY_FILE = path.join(process.cwd(), "data", "history.json")
+
+function buildLogsPath(buildId: string): string {
+  return path.join(process.cwd(), "data", buildId, "logs.json")
+}
 
 async function ensureFile(): Promise<void> {
   await fs.mkdir(path.dirname(HISTORY_FILE), { recursive: true })
@@ -25,6 +29,27 @@ export async function appendHistory(record: BuildRecord): Promise<void> {
   const builds = await getHistory()
   builds.unshift(record) // newest first
   await fs.writeFile(HISTORY_FILE, JSON.stringify({ builds }, null, 2), "utf-8")
+}
+
+export async function saveBuildLogs(
+  buildId: string,
+  entries: LogEntry[]
+): Promise<void> {
+  const logsFile = buildLogsPath(buildId)
+  await fs.mkdir(path.dirname(logsFile), { recursive: true })
+  await fs.writeFile(logsFile, JSON.stringify(entries, null, 2), "utf-8")
+}
+
+export async function getBuildLogs(
+  buildId: string
+): Promise<LogEntry[] | null> {
+  const logsFile = buildLogsPath(buildId)
+  try {
+    const raw = await fs.readFile(logsFile, "utf-8")
+    return JSON.parse(raw) as LogEntry[]
+  } catch {
+    return null
+  }
 }
 
 export async function updateHistoryRecord(
