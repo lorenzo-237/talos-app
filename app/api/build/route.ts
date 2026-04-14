@@ -24,7 +24,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const body = await req.json()
     const parsed = buildSchema.safeParse(body)
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid request", details: parsed.error.format() }, { status: 400 })
+      return NextResponse.json(
+        { error: "Invalid request", details: parsed.error.format() },
+        { status: 400 }
+      )
     }
 
     const { version, packages, keepTemp } = parsed.data
@@ -37,7 +40,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     if (!resolved) {
-      return NextResponse.json({ error: `No package folder found for version "${version}"` }, { status: 404 })
+      return NextResponse.json(
+        { error: `No package folder found for version "${version}"` },
+        { status: 404 }
+      )
     }
 
     const buildId = uuidv4()
@@ -61,9 +67,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       const lockKey = `${resolved.resolvedVersion}:${packages.join(",")}`
 
       if (activeBuilds.has(lockKey)) {
-        logger.error(`Build already running for version ${resolved.resolvedVersion} with these packages`)
+        logger.error(
+          `Build already running for version ${resolved.resolvedVersion} with these packages`
+        )
         logger.done()
-        await updateHistoryRecord(buildId, { status: "error", endedAt: new Date().toISOString() })
+        await updateHistoryRecord(buildId, {
+          status: "error",
+          endedAt: new Date().toISOString(),
+        })
         return
       }
 
@@ -82,7 +93,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           }
 
           try {
-            await buildPackage(pkgDef, resolved.resolvedVersion, version, env.SRC_DIR, env.OUTPUT_DIR, logger, keepTemp)
+            const output = path.join(env.OUTPUT_DIR, version)
+            await buildPackage(
+              pkgDef,
+              resolved.resolvedVersion,
+              version,
+              env.SRC_DIR,
+              output,
+              logger,
+              keepTemp
+            )
           } catch (err) {
             logger.error(`Package "${pkgName}" failed: ${err}`)
             if (finalStatus === "success") finalStatus = "partial"
@@ -91,13 +111,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       } finally {
         activeBuilds.delete(lockKey)
         logger.done()
-        await updateHistoryRecord(buildId, { status: finalStatus, endedAt: new Date().toISOString() })
+        await updateHistoryRecord(buildId, {
+          status: finalStatus,
+          endedAt: new Date().toISOString(),
+        })
       }
     })()
 
-    return NextResponse.json({ buildId, resolvedVersion: resolved.resolvedVersion })
+    return NextResponse.json({
+      buildId,
+      resolvedVersion: resolved.resolvedVersion,
+    })
   } catch (err) {
     console.error("[POST /api/build]", err)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    )
   }
 }

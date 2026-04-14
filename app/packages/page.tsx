@@ -25,7 +25,9 @@ import {
 } from "@/components/ui/dialog"
 
 // Monaco editor loaded client-side only
-const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false })
+const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
+  ssr: false,
+})
 
 interface PackageInfo {
   name: string
@@ -53,7 +55,7 @@ export default function PackagesPage() {
       try {
         const res = await fetch("/api/versions")
         if (!res.ok) return
-        const data = await res.json() as { versions: string[] }
+        const data = (await res.json()) as { versions: string[] }
         setVersions(data.versions)
         if (data.versions.length > 0) {
           setSelectedVersion(data.versions[data.versions.length - 1])
@@ -75,9 +77,11 @@ export default function PackagesPage() {
       setEditorContent("")
       setOriginalContent("")
       try {
-        const res = await fetch(`/api/packages?version=${encodeURIComponent(selectedVersion)}`)
+        const res = await fetch(
+          `/api/packages?version=${encodeURIComponent(selectedVersion)}`
+        )
         if (!res.ok) return
-        const data = await res.json() as { packages: PackageInfo[] }
+        const data = (await res.json()) as { packages: PackageInfo[] }
         setPackages(data.packages)
       } catch {
         toast.error("Impossible de charger les packages")
@@ -91,13 +95,17 @@ export default function PackagesPage() {
   // Load package JSON when package is selected
   async function handleSelectPackage(pkgName: string) {
     if (isDirty) {
-      const confirmed = window.confirm("Des modifications non sauvegardées seront perdues. Continuer ?")
+      const confirmed = window.confirm(
+        "Des modifications non sauvegardées seront perdues. Continuer ?"
+      )
       if (!confirmed) return
     }
     setSelectedPackage(pkgName)
     setLoading(true)
     try {
-      const res = await fetch(`/api/packages/${encodeURIComponent(selectedVersion)}/${encodeURIComponent(pkgName)}`)
+      const res = await fetch(
+        `/api/packages/${encodeURIComponent(selectedVersion)}/${encodeURIComponent(pkgName)}`
+      )
       if (!res.ok) {
         toast.error("Impossible de charger le package")
         return
@@ -127,7 +135,7 @@ export default function PackagesPage() {
         }
       )
       if (!res.ok) {
-        const data = await res.json() as { error: string }
+        const data = (await res.json()) as { error: string }
         toast.error(data.error ?? "Erreur lors de la sauvegarde")
         return
       }
@@ -215,7 +223,7 @@ export default function PackagesPage() {
               <FileJson className="size-4 shrink-0 text-muted-foreground" />
               <span className="min-w-0 truncate">{pkg.output || pkg.name}</span>
               <button
-                className="ml-auto shrink-0 rounded p-0.5 opacity-0 hover:text-red-500 group-hover:opacity-100"
+                className="ml-auto shrink-0 rounded p-0.5 opacity-0 group-hover:opacity-100 hover:text-red-500"
                 onClick={(e) => {
                   e.stopPropagation()
                   setDeleteTarget(pkg.name)
@@ -226,7 +234,9 @@ export default function PackagesPage() {
             </div>
           ))}
           {!loading && packages.length === 0 && selectedVersion && (
-            <p className="text-xs text-muted-foreground">Aucun package trouvé.</p>
+            <p className="text-xs text-muted-foreground">
+              Aucun package trouvé.
+            </p>
           )}
         </aside>
 
@@ -238,14 +248,20 @@ export default function PackagesPage() {
             <>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">{selectedPackage}.json</span>
+                  <span className="text-sm font-medium">
+                    {selectedPackage}.json
+                  </span>
                   {isDirty && (
                     <Badge variant="secondary" className="text-xs">
                       Modifié
                     </Badge>
                   )}
                 </div>
-                <Button size="sm" onClick={handleSave} disabled={!isDirty || saving}>
+                <Button
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={!isDirty || saving}
+                >
                   {saving ? <Loader2 className="animate-spin" /> : <Save />}
                   Sauvegarder
                 </Button>
@@ -258,11 +274,12 @@ export default function PackagesPage() {
                   onChange={(val) => setEditorContent(val ?? "")}
                   theme="vs-dark"
                   options={{
-                    minimap: { enabled: false },
+                    minimap: { enabled: true },
                     fontSize: 13,
                     tabSize: 2,
                     scrollBeyondLastLine: false,
                     wordWrap: "on",
+                    stickyScroll: { enabled: false },
                   }}
                 />
               </div>
@@ -276,20 +293,31 @@ export default function PackagesPage() {
       </div>
 
       {/* Delete confirmation dialog */}
-      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+      <Dialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Supprimer le package</DialogTitle>
             <DialogDescription>
-              Êtes-vous sûr de vouloir supprimer{" "}
-              <strong>{deleteTarget}</strong> ? Cette action est irréversible.
+              Êtes-vous sûr de vouloir supprimer <strong>{deleteTarget}</strong>{" "}
+              ? Cette action est irréversible.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteTarget(null)}
+              disabled={deleting}
+            >
               Annuler
             </Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
               {deleting ? <Loader2 className="animate-spin" /> : null}
               Supprimer
             </Button>

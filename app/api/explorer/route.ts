@@ -13,14 +13,58 @@ function safePath(relativePath: string): string | null {
   return resolved
 }
 
-export async function GET(request: NextRequest): Promise<NextResponse> {
+const CONTENT_TYPES: Record<string, string> = {
+  txt: "text/plain; charset=utf-8",
+  ini: "text/plain; charset=utf-8",
+  pdf: "application/pdf",
+  exe: "application/octet-stream",
+  dll: "application/octet-stream",
+  wdk: "application/octet-stream",
+  fic: "application/octet-stream",
+  ndx: "application/octet-stream",
+  mmo: "application/octet-stream",
+  zip: "application/zip",
+  "7z": "application/x-7z-compressed",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  rtf: "application/rtf",
+}
+
+function getContentType(ext: string): string {
+  return CONTENT_TYPES[ext] ?? "application/octet-stream"
+}
+
+export async function GET(request: NextRequest): Promise<NextResponse | Response> {
   try {
     const rel = request.nextUrl.searchParams.get("path") ?? ""
+    const forceDownload =
+      request.nextUrl.searchParams.get("download") === "1"
+
     const target = safePath(rel)
     if (!target) {
       return NextResponse.json({ error: "Invalid path" }, { status: 400 })
     }
 
+    const stat = await fs.stat(target)
+
+    if (stat.isFile()) {
+      const ext = path.extname(target).slice(1).toLowerCase()
+      const contentType = getContentType(ext)
+      const filename = path.basename(target)
+      const buffer = await fs.readFile(target)
+
+      const headers = new Headers()
+      headers.set("Content-Type", contentType)
+      headers.set(
+        "Content-Disposition",
+        forceDownload
+          ? `attachment; filename="${filename}"`
+          : `inline; filename="${filename}"`
+      )
+      return new Response(buffer, { headers })
+    }
+
+    // Directory listing
     const entries = await fs.readdir(target, { withFileTypes: true })
     const items = await Promise.all(
       entries.map(async (e) => {
@@ -28,9 +72,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         let size: number | undefined
         let modifiedAt: string | undefined
         try {
-          const stat = await fs.stat(fullPath)
-          size = stat.isFile() ? stat.size : undefined
-          modifiedAt = stat.mtime.toISOString()
+          const s = await fs.stat(fullPath)
+          size = s.isFile() ? s.size : undefined
+          modifiedAt = s.mtime.toISOString()
         } catch {}
         return {
           name: e.name,
@@ -44,7 +88,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ path: rel, entries: items })
   } catch (err) {
     console.error("[GET /api/explorer]", err)
-    return NextResponse.json({ error: "Failed to list directory" }, { status: 500 })
+    return NextResponse.json(
+      { error: "Failed to list directory" },
+      { status: 500 }
+    )
   }
 }
 
@@ -67,7 +114,46 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ success: true })
   } catch (err) {
     console.error("[DELETE /api/explorer]", err)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PUT(req: NextRequest): Promise<NextResponse> {
+  try {
+    const formData = await req.formData()
+    const dir = (formData.get("path") as string) ?? ""
+    const files = formData.getAll("files") as File[]
+
+    if (files.length === 0) {
+      return NextResponse.json({ error: "No files provided" }, { status: 400 })
+    }
+
+    const target = safePath(dir)
+    if (!target) {
+      return NextResponse.json({ error: "Invalid path" }, { status: 400 })
+    }
+
+    await fs.mkdir(target, { recursive: true })
+
+    const uploaded = await Promise.all(
+      files.map(async (file) => {
+        const filePath = path.join(target, file.name)
+        const buffer = Buffer.from(await file.arrayBuffer())
+        await fs.writeFile(filePath, buffer)
+        return file.name
+      })
+    )
+
+    return NextResponse.json({ success: true, uploaded })
+  } catch (err) {
+    console.error("[PUT /api/explorer]", err)
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    )
   }
 }
 
@@ -90,6 +176,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ success: true })
   } catch (err) {
     console.error("[POST /api/explorer]", err)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    )
   }
 }
