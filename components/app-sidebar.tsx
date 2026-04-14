@@ -2,10 +2,11 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Package, Hammer, FolderOpen, History } from "lucide-react"
+import { Package, Hammer, FolderOpen, History, Anvil } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarHeader,
@@ -13,6 +14,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+
+import SettingsPopover from "./settings-popover"
 
 const navItems = [
   { href: "/", label: "Build", icon: Hammer },
@@ -27,7 +30,10 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="border-b px-4 py-3">
-        <span className="text-base font-semibold tracking-tight">Talos</span>
+        <div className="flex gap-1">
+          <Anvil />
+          <span className="text-base font-semibold tracking-tight">Talos</span>
+        </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
@@ -47,6 +53,9 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter>
+        <SettingsPopover />
+      </SidebarFooter>
     </Sidebar>
   )
 }
