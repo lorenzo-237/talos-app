@@ -1,7 +1,20 @@
 export interface PackageDefinition {
   output: string
   install?: InstallSection
-  archives: ArchiveDefinition[]
+  archives?: ArchiveDefinition[]
+  directories?: DirectoryNode[]
+  callbacks?: CallbacksDefinition
+}
+
+export interface CallbacksDefinition {
+  exec?: ExecEntry[]
+  actions?: string[]
+}
+
+export interface ExecEntry {
+  name: string
+  dir: string
+  args: string
 }
 
 export interface InstallSection {

@@ -1,7 +1,10 @@
 import fs from "fs/promises"
 import path from "path"
 import { execa } from "execa"
-import { resolvePlaceholders } from "./placeholder-resolver"
+import {
+  resolvePlaceholders,
+  type PlaceholderContext,
+} from "./placeholder-resolver"
 import { copyDir, copyFile, pathExists } from "./source-resolver"
 import { processIni } from "./ini-generator"
 import type { BuildLogger } from "./build-logger"
@@ -10,6 +13,7 @@ import type {
   ArchiveDefinition,
   DirectoryNode,
   InstallSection,
+  CallbacksDefinition,
 } from "@/types/package-schema"
 
 /**
@@ -281,6 +285,63 @@ async function processInstallSection(
 }
 
 /**
+ * Execute callbacks (exec + actions) after the package output is in place.
+ */
+async function processCallbacks(
+  callbacks: CallbacksDefinition,
+  version: string,
+  srcDir: string,
+  outputPackageDir: string,
+  buildId: string,
+  logger: BuildLogger
+): Promise<void> {
+  const context: PlaceholderContext = {
+    buildId,
+    defaultOutput: outputPackageDir,
+    cwdData: path.join(process.cwd(), "data"),
+    directories: path.join(srcDir, "directories"),
+  }
+
+  // exec — run each binary with resolved args
+  if (callbacks.exec) {
+    for (const entry of callbacks.exec) {
+      const exePath = path.join(process.cwd(), "exec", entry.dir, entry.name)
+      const resolvedArgs = resolvePlaceholders(entry.args, version, context)
+      logger.log(`Executing: ${entry.name} ${resolvedArgs}`)
+      try {
+        await execa(`"${exePath}" ${resolvedArgs}`, { shell: true })
+      } catch (err) {
+        logger.error(`Exec "${entry.name}" failed: ${err}`)
+        throw err
+      }
+    }
+  }
+
+  // actions — post-processing on outputPackageDir
+  for (const action of callbacks.actions ?? []) {
+    if (action === "rename-minus") {
+      logger.log("Action rename-minus: renaming files to lowercase...")
+      const entries = await fs.readdir(outputPackageDir, {
+        withFileTypes: true,
+      })
+      for (const entry of entries) {
+        if (!entry.isFile()) continue
+        const lower = entry.name.toLowerCase()
+        if (lower !== entry.name) {
+          await fs.rename(
+            path.join(outputPackageDir, entry.name),
+            path.join(outputPackageDir, lower)
+          )
+          logger.log(`  ${entry.name} → ${lower}`)
+        }
+      }
+    } else {
+      logger.warn(`Unknown action: "${action}"`)
+    }
+  }
+}
+
+/**
  * Main build entry point.
  */
 export async function buildPackage(
@@ -290,6 +351,7 @@ export async function buildPackage(
   srcDir: string,
   outputDir: string,
   logger: BuildLogger,
+  buildId: string,
   keepTemp = false
 ): Promise<void> {
   const { v4: uuidv4 } = await import("uuid")
@@ -301,11 +363,13 @@ export async function buildPackage(
   try {
     logger.log(`Starting build for package: ${packageDef.output}`)
     logger.log(`Version: ${inputVersion} (resolved: ${resolvedVersion})`)
-    logger.progress(0, packageDef.archives.length)
+
+    const archives = packageDef.archives ?? []
+    logger.progress(0, archives.length)
 
     // Build each archive
-    for (let i = 0; i < packageDef.archives.length; i++) {
-      const archive = packageDef.archives[i]
+    for (let i = 0; i < archives.length; i++) {
+      const archive = archives[i]
       try {
         await buildArchive(
           archive,
@@ -319,7 +383,14 @@ export async function buildPackage(
         logger.error(`Failed to build archive "${archive.name}": ${err}`)
         throw err
       }
-      logger.progress(i + 1, packageDef.archives.length)
+      logger.progress(i + 1, archives.length)
+    }
+
+    // Process top-level directories (callback packages)
+    if (packageDef.directories) {
+      for (const node of packageDef.directories) {
+        await processDirectoryNode(node, inputVersion, srcDir, tempDir, logger)
+      }
     }
 
     // Process install section
@@ -338,6 +409,19 @@ export async function buildPackage(
     await fs.mkdir(path.dirname(outputPackageDir), { recursive: true })
     await fs.rm(outputPackageDir, { recursive: true, force: true })
     await fs.rename(tempDir, outputPackageDir)
+
+    // Run callbacks after output is in final location
+    if (packageDef.callbacks) {
+      logger.log("Running callbacks...")
+      await processCallbacks(
+        packageDef.callbacks,
+        inputVersion,
+        srcDir,
+        outputPackageDir,
+        buildId,
+        logger
+      )
+    }
 
     logger.log(`Build complete. Output: ${outputPackageDir}`)
   } catch (err) {

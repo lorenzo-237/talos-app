@@ -54,10 +54,20 @@ export async function PUT(
     const body = await req.json()
 
     // Basic schema validation with Zod
-    const schema = z.object({
-      output: z.string().min(1),
-      archives: z.array(z.unknown()).min(1),
-    })
+    const schema = z
+      .object({
+        output: z.string().min(1),
+        archives: z.array(z.unknown()).optional(),
+        directories: z.array(z.unknown()).optional(),
+        callbacks: z.unknown().optional(),
+      })
+      .refine(
+        (d) =>
+          (d.archives && d.archives.length > 0) ||
+          d.directories !== undefined ||
+          d.callbacks !== undefined,
+        { message: "Package must have archives, directories, or callbacks" }
+      )
     const parsed = schema.safeParse(body)
     if (!parsed.success) {
       return NextResponse.json({ error: "Invalid package schema", details: parsed.error.format() }, { status: 400 })

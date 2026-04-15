@@ -1,0 +1,16 @@
+{
+  "output": "BDD_VIERGE",
+  "directories": [
+    { "name": "{version-3}\\Tbl_Paramètres", "onlyContent": true }
+  ],
+  "callbacks": {
+    "exec": [
+      {
+        "name": "windev-forge.exe",
+        "dir": "windows",
+        "args": "-id={buildId} -action=generation-tables -f=\"{directories}\\{version-3}\\Medoc\\Analyse_Medoc.wdd\" -version=3 -output=\"{default_output}\" -l=\"{cwd_data}\""
+      }
+    ],
+    "actions": ["rename-minus"]
+  }
+}

@@ -151,7 +151,8 @@ async function main(): Promise<void> {
       version!,
       srcDir!,
       outputDir!,
-      logger
+      logger,
+      "test-build"
     )
     logger.done()
     console.log(`\n\x1b[32mDone.\x1b[0m`)

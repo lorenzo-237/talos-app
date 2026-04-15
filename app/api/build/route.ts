@@ -105,6 +105,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               env.SRC_DIR,
               output,
               logger,
+              buildId,
               keepTemp
             )
           } catch (err) {
