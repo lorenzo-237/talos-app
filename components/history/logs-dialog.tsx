@@ -9,15 +9,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import type { BuildRecord, LogEntry, LogType } from "@/types/build"
-
-const LOG_CLASS: Record<LogType, string> = {
-  log: "text-foreground",
-  warning: "text-amber-400",
-  error: "text-red-400",
-  done: "text-green-400",
-  progress: "text-muted-foreground",
-}
+import { LOG_COLORS } from "@/lib/log-colors"
+import type { BuildRecord, LogEntry } from "@/types/build"
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString("fr-FR", { timeStyle: "medium" })
@@ -160,7 +153,7 @@ export function LogsDialog({ build, onClose }: LogsDialogProps) {
           ) : state.fileLoading ? (
             <Spinner />
           ) : (
-            <div className="max-h-[55vh] overflow-y-auto rounded-md bg-black p-3 font-mono text-xs whitespace-pre-wrap text-foreground">
+            <div className="max-h-[55vh] overflow-y-auto rounded-md border bg-muted/30 p-3 font-mono text-xs whitespace-pre-wrap text-foreground">
               {state.fileContent ?? ""}
             </div>
           )}
@@ -216,13 +209,13 @@ function BuildLogsView({
     )
   }
   return (
-    <div className="max-h-[55vh] overflow-y-auto rounded-md bg-black p-3 font-mono text-xs">
+    <div className="max-h-[55vh] overflow-y-auto rounded-md border bg-muted/30 p-3 font-mono text-xs">
       {logs.map((entry, i) => (
         <div key={i} className="flex gap-2 py-0.5">
           <span className="shrink-0 text-muted-foreground">
             {formatTime(entry.timestamp)}
           </span>
-          <span className={LOG_CLASS[entry.type]}>{entry.message}</span>
+          <span className={LOG_COLORS[entry.type]}>{entry.message}</span>
         </div>
       ))}
       <div ref={logsEndRef} />

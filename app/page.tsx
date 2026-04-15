@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
 import { useRights } from "@/contexts/auth-context"
+import { LOG_COLORS } from "@/lib/log-colors"
 import type { LogEntry } from "@/types/build"
 
 interface PackageInfo {
@@ -25,13 +26,6 @@ interface PackagesResult {
   packages: PackageInfo[]
 }
 
-const LOG_COLORS: Record<string, string> = {
-  log: "text-foreground",
-  warning: "text-yellow-500",
-  error: "text-red-500",
-  done: "text-green-500",
-  progress: "text-blue-500",
-}
 
 type LogFilter = "all" | "error" | "warning"
 
