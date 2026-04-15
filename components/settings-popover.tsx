@@ -18,10 +18,10 @@ function SettingsPopover() {
 
   return (
     <Popover>
-      <PopoverTrigger className="flex justify-start">
+      <PopoverTrigger asChild>
         <Button variant="ghost" size="sm" title="Paramètres d'affichage">
           <Settings2 className="h-4 w-4" />
-          <span>Paramètres d'affichage</span>
+          Paramètres
         </Button>
       </PopoverTrigger>
 

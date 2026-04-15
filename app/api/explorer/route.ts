@@ -3,6 +3,7 @@ import fs from "fs/promises"
 import path from "path"
 import { z } from "zod"
 import { env } from "@/lib/env"
+import { requireAuth } from "@/lib/api-auth"
 
 function safePath(relativePath: string): string | null {
   const resolved = path.resolve(path.join(env.SRC_DIR, relativePath))
@@ -35,6 +36,9 @@ function getContentType(ext: string): string {
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse | Response> {
+  const auth = requireAuth(request, "canReadExplorer")
+  if (auth instanceof NextResponse) return auth
+
   try {
     const rel = request.nextUrl.searchParams.get("path") ?? ""
     const forceDownload =
@@ -98,6 +102,9 @@ export async function GET(request: NextRequest): Promise<NextResponse | Response
 const deleteSchema = z.object({ path: z.string() })
 
 export async function DELETE(req: NextRequest): Promise<NextResponse> {
+  const auth = requireAuth(req, "canDeleteExplorer")
+  if (auth instanceof NextResponse) return auth
+
   try {
     const body = await req.json()
     const parsed = deleteSchema.safeParse(body)
@@ -122,6 +129,9 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
 }
 
 export async function PUT(req: NextRequest): Promise<NextResponse> {
+  const auth = requireAuth(req, "canWriteExplorer")
+  if (auth instanceof NextResponse) return auth
+
   try {
     const formData = await req.formData()
     const dir = (formData.get("path") as string) ?? ""
@@ -160,6 +170,9 @@ export async function PUT(req: NextRequest): Promise<NextResponse> {
 const mkdirSchema = z.object({ path: z.string() })
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const auth = requireAuth(req, "canWriteExplorer")
+  if (auth instanceof NextResponse) return auth
+
   try {
     const body = await req.json()
     const parsed = mkdirSchema.safeParse(body)

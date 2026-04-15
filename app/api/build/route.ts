@@ -8,6 +8,7 @@ import { resolvePackageFolder } from "@/lib/version-resolver"
 import { BuildLogger, buildRegistry } from "@/lib/build-logger"
 import { buildPackage } from "@/lib/archive-builder"
 import { appendHistory, updateHistoryRecord, saveBuildLogs } from "@/lib/history"
+import { requireAuth } from "@/lib/api-auth"
 import type { BuildStatus } from "@/types/build"
 
 // Simple concurrency guard — prevents double-building same version+package
@@ -20,6 +21,9 @@ const buildSchema = z.object({
 })
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const auth = requireAuth(req, "canBuild")
+  if (auth instanceof NextResponse) return auth
+
   try {
     const body = await req.json()
     const parsed = buildSchema.safeParse(body)

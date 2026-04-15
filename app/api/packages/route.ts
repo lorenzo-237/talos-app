@@ -3,8 +3,12 @@ import fs from "fs/promises"
 import path from "path"
 import { env } from "@/lib/env"
 import { resolvePackageFolder } from "@/lib/version-resolver"
+import { requireAuth } from "@/lib/api-auth"
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
+  const auth = requireAuth(request, "canReadPackages")
+  if (auth instanceof NextResponse) return auth
+
   try {
     const version = request.nextUrl.searchParams.get("version")
     if (!version) {

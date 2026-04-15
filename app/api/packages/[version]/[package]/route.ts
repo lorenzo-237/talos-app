@@ -4,6 +4,7 @@ import path from "path"
 import { z } from "zod"
 import { env } from "@/lib/env"
 import { resolvePackageFolder } from "@/lib/version-resolver"
+import { requireAuth } from "@/lib/api-auth"
 
 type Params = { version: string; package: string }
 
@@ -19,9 +20,12 @@ async function resolveFilePath(
 }
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<Params> }
 ): Promise<NextResponse> {
+  const auth = requireAuth(req, "canReadPackages")
+  if (auth instanceof NextResponse) return auth
+
   try {
     const { version, package: pkg } = await params
     const result = await resolveFilePath(version, pkg)
@@ -39,6 +43,9 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<Params> }
 ): Promise<NextResponse> {
+  const auth = requireAuth(req, "canWritePackages")
+  if (auth instanceof NextResponse) return auth
+
   try {
     const { version, package: pkg } = await params
     const result = await resolveFilePath(version, pkg)
@@ -65,9 +72,12 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<Params> }
 ): Promise<NextResponse> {
+  const auth = requireAuth(req, "canDeletePackages")
+  if (auth instanceof NextResponse) return auth
+
   try {
     const { version, package: pkg } = await params
     const result = await resolveFilePath(version, pkg)

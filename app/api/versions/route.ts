@@ -1,9 +1,12 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import fs from "fs/promises"
 import path from "path"
 import { env } from "@/lib/env"
+import { requireAuth } from "@/lib/api-auth"
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(req: NextRequest): Promise<NextResponse> {
+  const auth = requireAuth(req)
+  if (auth instanceof NextResponse) return auth
   try {
     const entries = await fs.readdir(env.PACKAGES_DIR, { withFileTypes: true })
     const versions = entries

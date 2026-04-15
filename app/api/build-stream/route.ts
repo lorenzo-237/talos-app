@@ -1,8 +1,12 @@
-import { NextRequest } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { buildRegistry } from "@/lib/build-logger"
+import { requireAuth } from "@/lib/api-auth"
 import type { LogEntry } from "@/types/build"
 
 export async function GET(request: NextRequest): Promise<Response> {
+  const auth = requireAuth(request, "canBuild")
+  if (auth instanceof NextResponse) return auth as Response
+
   const buildId = request.nextUrl.searchParams.get("buildId")
 
   if (!buildId) {
