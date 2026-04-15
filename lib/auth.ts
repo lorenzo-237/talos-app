@@ -60,18 +60,29 @@ export function deriveRights(me: UserMeResponse): UserRights {
   if (isGlobalAdmin) return { ...ALL_RIGHTS }
 
   const codes = new Set(me.adsion_droitsMps ?? [])
-  // talos-read = lecture globale sur toutes les sections
-  const globalRead = codes.has("talos-read")
+  // talos-read = droit d'accès de base ; sans lui, aucune fonctionnalité
+  if (!codes.has("talos-read")) {
+    return {
+      canBuild: false,
+      canReadPackages: false,
+      canWritePackages: false,
+      canDeletePackages: false,
+      canReadExplorer: false,
+      canWriteExplorer: false,
+      canDeleteExplorer: false,
+      canViewHistory: false,
+    }
+  }
 
   return {
     canBuild: codes.has("talos-build"),
-    canReadPackages: globalRead || codes.has("talos-pkg-read"),
+    canReadPackages: codes.has("talos-pkg-read"),
     canWritePackages: codes.has("talos-pkg-write"),
     canDeletePackages: codes.has("talos-pkg-delete"),
-    canReadExplorer: globalRead || codes.has("talos-exp-read"),
+    canReadExplorer: codes.has("talos-exp-read"),
     canWriteExplorer: codes.has("talos-exp-write"),
     canDeleteExplorer: codes.has("talos-exp-delete"),
-    canViewHistory: globalRead || codes.has("talos-history"),
+    canViewHistory: codes.has("talos-history"),
   }
 }
 
