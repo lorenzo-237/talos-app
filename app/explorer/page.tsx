@@ -49,6 +49,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { useRights } from "@/contexts/auth-context"
 
 interface ExplorerEntry {
   name: string
@@ -112,6 +113,7 @@ type PreviewContent =
   | { kind: "pdf"; name: string; url: string }
 
 export default function ExplorerPage() {
+  const rights = useRights()
   const [currentPath, setCurrentPath] = React.useState("")
   const [entries, setEntries] = React.useState<ExplorerEntry[]>([])
   const [loading, setLoading] = React.useState(false)
@@ -325,32 +327,34 @@ export default function ExplorerPage() {
               Naviguez dans le répertoire source des ressources.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="icon"
-                  variant="outline"
-                  onClick={openUploadDialog}
-                >
-                  <Upload />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Ajouter des fichiers</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="icon"
-                  variant="outline"
-                  onClick={() => setShowNewFolder(true)}
-                >
-                  <FolderPlus />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Nouveau dossier</TooltipContent>
-            </Tooltip>
-          </div>
+          {rights.canWriteExplorer && (
+            <div className="flex items-center gap-2">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    onClick={openUploadDialog}
+                  >
+                    <Upload />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Ajouter des fichiers</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    onClick={() => setShowNewFolder(true)}
+                  >
+                    <FolderPlus />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Nouveau dossier</TooltipContent>
+              </Tooltip>
+            </div>
+          )}
         </div>
 
         {/* Breadcrumb */}
@@ -471,20 +475,22 @@ export default function ExplorerPage() {
                         }
                         return null
                       })()}
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            className="rounded p-1 opacity-0 hover:text-red-500 group-hover:opacity-100"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setDeleteTarget(entry)
-                            }}
-                          >
-                            <Trash2 className="size-3.5" />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent>Supprimer</TooltipContent>
-                      </Tooltip>
+                      {rights.canDeleteExplorer && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              className="rounded p-1 opacity-0 hover:text-red-500 group-hover:opacity-100"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setDeleteTarget(entry)
+                              }}
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>Supprimer</TooltipContent>
+                        </Tooltip>
+                      )}
                     </div>
                   </div>
                 ))}

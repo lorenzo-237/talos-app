@@ -24,6 +24,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 
+import { useRights } from "@/contexts/auth-context"
+
 // Monaco editor loaded client-side only
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
   ssr: false,
@@ -47,6 +49,7 @@ export default function PackagesPage() {
   const [deleteTarget, setDeleteTarget] = React.useState<string | null>(null)
   const [deleting, setDeleting] = React.useState(false)
 
+  const rights = useRights()
   const isDirty = editorContent !== originalContent
 
   // Load versions on mount
@@ -222,15 +225,17 @@ export default function PackagesPage() {
             >
               <FileJson className="size-4 shrink-0 text-muted-foreground" />
               <span className="min-w-0 truncate">{pkg.output || pkg.name}</span>
-              <button
-                className="ml-auto shrink-0 rounded p-0.5 opacity-0 group-hover:opacity-100 hover:text-red-500"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setDeleteTarget(pkg.name)
-                }}
-              >
-                <Trash2 className="size-3" />
-              </button>
+              {rights.canDeletePackages && (
+                <button
+                  className="ml-auto shrink-0 rounded p-0.5 opacity-0 group-hover:opacity-100 hover:text-red-500"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setDeleteTarget(pkg.name)
+                  }}
+                >
+                  <Trash2 className="size-3" />
+                </button>
+              )}
             </div>
           ))}
           {!loading && packages.length === 0 && selectedVersion && (
@@ -257,14 +262,16 @@ export default function PackagesPage() {
                     </Badge>
                   )}
                 </div>
-                <Button
-                  size="sm"
-                  onClick={handleSave}
-                  disabled={!isDirty || saving}
-                >
-                  {saving ? <Loader2 className="animate-spin" /> : <Save />}
-                  Sauvegarder
-                </Button>
+                {rights.canWritePackages && (
+                  <Button
+                    size="sm"
+                    onClick={handleSave}
+                    disabled={!isDirty || saving}
+                  >
+                    {saving ? <Loader2 className="animate-spin" /> : <Save />}
+                    Sauvegarder
+                  </Button>
+                )}
               </div>
               <div className="flex-1 overflow-hidden rounded-md border">
                 <MonacoEditor

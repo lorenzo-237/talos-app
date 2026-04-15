@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
+import { useRights } from "@/contexts/auth-context"
 import type { LogEntry } from "@/types/build"
 
 interface PackageInfo {
@@ -51,6 +52,7 @@ export default function BuildPage() {
   // Prevents the programmatic scroll from triggering the "user scrolled up" path
   const isProgrammaticScroll = React.useRef(false)
 
+  const rights = useRights()
   const versionValid = /^\d+(\.\d+){2,3}$/.test(version.trim())
 
   // Auto-scroll to bottom when new logs arrive
@@ -227,10 +229,12 @@ export default function BuildPage() {
             onKeyDown={(e) => e.key === "Enter" && handleSearch()}
             className="max-w-xs"
           />
-          <Button onClick={handleSearch} disabled={!versionValid || searching}>
-            {searching ? <Loader2 className="animate-spin" /> : <Search />}
-            Rechercher
-          </Button>
+          {rights.canReadPackages && (
+            <Button onClick={handleSearch} disabled={!versionValid || searching}>
+              {searching ? <Loader2 className="animate-spin" /> : <Search />}
+              Rechercher
+            </Button>
+          )}
         </div>
       </div>
 
@@ -286,28 +290,32 @@ export default function BuildPage() {
             ))}
           </div>
 
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="keep-temp"
-              checked={keepTemp}
-              onCheckedChange={(v) => setKeepTemp(v === true)}
-            />
-            <label
-              htmlFor="keep-temp"
-              className="cursor-pointer text-sm text-muted-foreground"
-            >
-              Conserver les dossiers temporaires
-            </label>
-          </div>
+          {rights.canBuild && (
+            <>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="keep-temp"
+                  checked={keepTemp}
+                  onCheckedChange={(v) => setKeepTemp(v === true)}
+                />
+                <label
+                  htmlFor="keep-temp"
+                  className="cursor-pointer text-sm text-muted-foreground"
+                >
+                  Conserver les dossiers temporaires
+                </label>
+              </div>
 
-          <Button
-            onClick={handleBuild}
-            disabled={building || selectedPackages.size === 0}
-            className="gap-2"
-          >
-            {building ? <Loader2 className="animate-spin" /> : <PlayCircle />}
-            Générer
-          </Button>
+              <Button
+                onClick={handleBuild}
+                disabled={building || selectedPackages.size === 0}
+                className="gap-2"
+              >
+                {building ? <Loader2 className="animate-spin" /> : <PlayCircle />}
+                Générer
+              </Button>
+            </>
+          )}
         </div>
       )}
 

@@ -20,6 +20,22 @@ export function useAuth(): AuthContextValue {
   return React.useContext(AuthContext)
 }
 
+const NO_RIGHTS: UserRights = {
+  canBuild: false,
+  canReadPackages: false,
+  canWritePackages: false,
+  canDeletePackages: false,
+  canReadExplorer: false,
+  canWriteExplorer: false,
+  canDeleteExplorer: false,
+  canViewHistory: false,
+}
+
+export function useRights(): UserRights {
+  const { user } = useAuth()
+  return user?.rights ?? NO_RIGHTS
+}
+
 // Convenience hook — redirect to /unauthorized if right is missing
 export function useRequireRight(right: keyof UserRights): boolean {
   const { user, loading } = useAuth()
