@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Rules
 
-When you need a shadcn components, list them and the I will download them manually
+When you need a shadcn component, list it and I will download it manually.
 
 ## Commands
 
@@ -26,12 +26,13 @@ npm run typecheck    # TypeScript check (no emit)
 Requires a `.env.local` file at the root:
 
 ```env
-SRC_DIR=C:/path/to/src          # Source resources directory
-OUTPUT_DIR=C:/path/to/output    # Where generated archives are saved
+SRC_DIR=C:/path/to/src           # Source resources directory
+OUTPUT_DIR=C:/path/to/output     # Where generated archives are saved
 PACKAGES_DIR=C:/path/to/packages # Package definition JSON files
+LDAP_API_URL=https://ldap-api... # Base URL of the LDAP authentication API
 ```
 
-These are validated at runtime via Zod in `lib/env.ts`. All paths must use forward slashes or be normalized with `path.normalize()`.
+These are validated at runtime via Zod in `lib/env.ts`.
 
 ## Architecture
 
@@ -41,18 +42,43 @@ These are validated at runtime via Zod in `lib/env.ts`. All paths must use forwa
 - `/packages` — JSON package editor (Monaco Editor)
 - `/explorer` — SRC_DIR file browser
 - `/history` — Build history
+- `/login` — Login form (LDAP credentials)
+- `/unauthorized` — Shown when user lacks required rights
+
+### Middleware
+
+`middleware.ts` protects all routes. Public paths: `/login`, `/unauthorized`, `/api/auth`, `/_next`, `/favicon.ico`. All others require a valid `talos_token` cookie or are redirected to `/login`.
 
 ### API Routes (`app/api/`)
 
-| Route                               | Method         | Purpose                                              |
-| ----------------------------------- | -------------- | ---------------------------------------------------- |
-| `/api/versions`                     | GET            | List available versions in PACKAGES_DIR              |
-| `/api/packages`                     | GET            | Resolve version + list packages (`?version=3.3.3.1`) |
-| `/api/packages/[version]/[package]` | GET/PUT/DELETE | Read/edit/delete a package JSON                      |
-| `/api/build`                        | POST           | Start a build, returns `buildId` immediately         |
-| `/api/build-stream`                 | GET            | SSE stream of build logs (`?buildId=xxx`)            |
-| `/api/history`                      | GET            | List past builds                                     |
-| `/api/explorer`                     | GET/DELETE     | Browse/delete files in SRC_DIR                       |
+| Route                                    | Method         | Purpose                                              |
+| ---------------------------------------- | -------------- | ---------------------------------------------------- |
+| `/api/auth/login`                        | POST           | LDAP login, sets auth + rights + refresh cookies     |
+| `/api/auth/me`                           | GET            | Return current user profile from cookie              |
+| `/api/auth/refresh`                      | POST           | Refresh access token using refresh_token cookie      |
+| `/api/auth/logout`                       | POST           | Clear all auth cookies                               |
+| `/api/versions`                          | GET            | List available versions in PACKAGES_DIR              |
+| `/api/packages`                          | GET            | Resolve version + list packages (`?version=3.3.3.1`) |
+| `/api/packages/[version]/[package]`      | GET/PUT/DELETE | Read/edit/delete a package JSON                      |
+| `/api/build`                             | POST           | Start a build, returns `buildId` immediately         |
+| `/api/build/active`                      | GET            | List currently running builds (cross-client)         |
+| `/api/build-stream`                      | GET            | SSE stream of build logs (`?buildId=xxx`)            |
+| `/api/history`                           | GET/DELETE     | List/delete past builds                              |
+| `/api/history/[buildId]`                 | GET            | Get a single build record                            |
+| `/api/history/[buildId]/data-logs`       | GET            | Get persisted logs for a completed build             |
+| `/api/explorer`                          | GET/DELETE     | Browse/delete files in SRC_DIR                       |
+
+### Authentication & Rights (`lib/auth.ts`, `lib/api-auth.ts`)
+
+Login proxies credentials to the LDAP API (`LDAP_API_URL`), fetches the user profile via `/api/v1/users/me`, and derives a `UserRights` object. Three cookies are set: `talos_token` (24h), `talos_refresh` (7d, optional), `talos_rights` (JSON-encoded rights, 24h).
+
+Rights are derived from `adsion_droitsMps` LDAP attribute codes:
+- `talos-read` — base access (required; without it all rights are false)
+- `talos-build`, `talos-pkg-read/write/delete`, `talos-exp-read/write/delete`, `talos-history`
+
+Admins (`isAdmin` / `isSuperuser` / `profiles.api[].isAdmin`) get all rights unconditionally.
+
+API route protection uses `requireAuth(req, "canBuild")` from `lib/api-auth.ts`. It reads the `talos_token` and `talos_rights` cookies — no JWT decoding, rights are trusted from the cookie.
 
 ### Core Library (`lib/`)
 
@@ -62,12 +88,22 @@ These are validated at runtime via Zod in `lib/env.ts`. All paths must use forwa
 - **`archive-builder.ts`** — Main build orchestrator: creates temp dir, builds archives recursively, processes install section, cleans up
 - **`source-resolver.ts`** — Resolves source file paths in SRC_DIR
 - **`ini-generator.ts`** — Copies `.ini` from `SRC_DIR/inis/`, then patches specific keys using the `ini` npm package (preserves unchanged keys)
-- **`build-logger.ts`** — In-memory log accumulator (Map<buildId, LogEntry[]>) that feeds SSE; entries cleaned after 1h
+- **`build-logger.ts`** — In-memory log accumulator (`globalThis` singleton) that feeds SSE; entries cleaned after 1h
+- **`running-builds.ts`** — File-based registry (`data/running-build.json`) of the active build; includes PID so stale files from prior server processes are auto-discarded
+- **`history.ts`** — Reads/writes `data/history.json` and per-build `data/{buildId}/logs.json`
+- **`log-colors.ts`** — Color utilities for log entry rendering
+
+### Persistent State (`data/`)
+
+`data/` is a local directory (gitignored) created at runtime:
+- `data/history.json` — list of all `BuildRecord` objects
+- `data/{buildId}/logs.json` — persisted log entries for each completed build
+- `data/running-build.json` — currently active build (cleared on completion or server restart)
 
 ### Types (`types/`)
 
 - **`package-schema.ts`** — Full TypeScript types for package JSON: `PackageDefinition`, `ArchiveDefinition`, `DirectoryNode`, `IniDefinition`, etc.
-- **`build.ts`** — Build state and log entry types
+- **`build.ts`** — `BuildRecord`, `BuildState`, `LogEntry` types
 
 ### Key Build Logic
 
@@ -81,23 +117,15 @@ These are validated at runtime via Zod in `lib/env.ts`. All paths must use forwa
 
 **INI files**: copied from `SRC_DIR/inis/` then specific keys are patched. Only listed keys are modified; the rest of the file is preserved.
 
-**SSE streaming**: `POST /api/build` starts the build in the background and returns a `buildId`. Client connects to `GET /api/build-stream?buildId=xxx` to receive log events (`log`, `warning`, `error`, `progress`, `done`).
-
-### UI Components
-
-- **`BuildForm`** — Version input (regex `X.X.X` or `X.X.X.X`) + package checkboxes + generate button
-- **`BuildLogs`** — Scrollable log panel with color-coded types + progress bar
-- **`PackageEditor`** — Monaco Editor with real-time JSON + Zod schema validation
-- **`FileExplorer`** — SRC_DIR browser with breadcrumb, upload, delete, create folder
-- **`BuildHistory`** — Past builds list with log replay
+**SSE streaming**: `POST /api/build` starts the build in the background and returns a `buildId`. Client connects to `GET /api/build-stream?buildId=xxx` to receive log events (`log`, `warning`, `error`, `progress`, `done`). The in-memory log store (`build-logger.ts`) uses a `globalThis` singleton to survive Turbopack hot-reloads — see `docs/globalThis-singleton.md`.
 
 ## Key Conventions
 
 - **Path handling**: Always use `path.join()` / `path.resolve()`, never string concatenation. Validate explorer paths stay within SRC_DIR to prevent path traversal.
 - **Async only**: Use `fs/promises` exclusively — no synchronous `fs` calls.
 - **Temp directories**: Write to `OUTPUT_DIR/TEMP_{uuid}/` during build, then move atomically. Always clean up in `try/finally`.
-- **Build concurrency**: Prevent two simultaneous builds for the same package using a `Set<string>` of active build IDs.
+- **Build concurrency**: Only one build can run at a time; `running-builds.ts` enforces this across page reloads.
 - **Zod validation**: Validate all API inputs and all JSON read from disk.
+- **`globalThis` singletons**: Any module-level state shared across Next.js API routes must be anchored on `globalThis` (see `docs/globalThis-singleton.md`). Use `declare global { var __name: Type | undefined }` for TypeScript compatibility.
 - **External dependency**: `7z` CLI must be installed and in PATH (Windows: install 7-Zip and add `C:\Program Files\7-Zip\` to system PATH). Called via `execa`.
-- **No auth**: App is local-network only, no authentication required.
 - **Formatting**: No semicolons, double quotes, trailing commas (ES5). 80-char line width. Run `npm run format` before committing.
