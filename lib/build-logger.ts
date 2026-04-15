@@ -26,8 +26,14 @@ export class BuildLogger {
       ...(progress !== undefined ? { progress } : {}),
     }
     this.entries.push(entry)
-    for (const listener of this.listeners) {
-      listener(entry)
+    for (const listener of [...this.listeners]) {
+      try {
+        listener(entry)
+      } catch {
+        // Listener threw (e.g. enqueue on a cancelled SSE stream) — remove it
+        // so it cannot disrupt future emissions or the build task itself.
+        this.listeners = this.listeners.filter((l) => l !== listener)
+      }
     }
   }
 

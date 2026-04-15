@@ -64,3 +64,28 @@ export async function updateHistoryRecord(
     await fs.writeFile(HISTORY_FILE, JSON.stringify({ builds }, null, 2), "utf-8")
   }
 }
+
+/**
+ * Remove builds from history.json and delete their per-build data directories.
+ * Silently skips IDs that do not exist.
+ */
+export async function deleteBuilds(buildIds: string[]): Promise<void> {
+  await ensureFile()
+  const builds = await getHistory()
+  const idSet = new Set(buildIds)
+  const remaining = builds.filter((b) => !idSet.has(b.buildId))
+  await fs.writeFile(
+    HISTORY_FILE,
+    JSON.stringify({ builds: remaining }, null, 2),
+    "utf-8"
+  )
+  // Remove per-build data directories (logs.json, etc.) — ignore errors
+  await Promise.allSettled(
+    buildIds.map((id) =>
+      fs.rm(path.join(process.cwd(), "data", id), {
+        recursive: true,
+        force: true,
+      })
+    )
+  )
+}

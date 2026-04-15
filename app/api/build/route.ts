@@ -8,6 +8,7 @@ import { resolvePackageFolder } from "@/lib/version-resolver"
 import { BuildLogger, buildRegistry } from "@/lib/build-logger"
 import { buildPackage } from "@/lib/archive-builder"
 import { appendHistory, updateHistoryRecord, saveBuildLogs } from "@/lib/history"
+import { runningBuilds } from "@/lib/running-builds"
 import { requireAuth } from "@/lib/api-auth"
 import type { BuildStatus } from "@/types/build"
 
@@ -51,8 +52,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     const buildId = uuidv4()
+    const startedAt = new Date().toISOString()
     const logger = new BuildLogger()
     buildRegistry.set(buildId, logger)
+
+    // Register as running so every client can detect it via GET /api/build/active
+    await runningBuilds.add({
+      buildId,
+      version,
+      resolvedVersion: resolved.resolvedVersion,
+      packages,
+      startedAt,
+    })
 
     const record = {
       buildId,
@@ -60,7 +71,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       resolvedVersion: resolved.resolvedVersion,
       packages,
       status: "running" as BuildStatus,
-      startedAt: new Date().toISOString(),
+      startedAt,
       outputDir: env.OUTPUT_DIR,
     }
     await appendHistory(record)
@@ -115,6 +126,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         }
       } finally {
         activeBuilds.delete(lockKey)
+        await runningBuilds.remove(buildId)
         logger.done()
         await updateHistoryRecord(buildId, {
           status: finalStatus,
