@@ -21,7 +21,9 @@ export function useAuth(): AuthContextValue {
 }
 
 const NO_RIGHTS: UserRights = {
-  canBuild: false,
+  canBuildProd: false,
+  canBuildTest: false,
+  canBuildDev: false,
   canReadPackages: false,
   canWritePackages: false,
   canDeletePackages: false,
@@ -29,6 +31,9 @@ const NO_RIGHTS: UserRights = {
   canWriteExplorer: false,
   canDeleteExplorer: false,
   canViewHistory: false,
+  canReadReleases: false,
+  canMoveReleases: false,
+  canDeleteReleases: false,
 }
 
 export function useRights(): UserRights {

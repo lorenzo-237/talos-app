@@ -12,7 +12,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import type { BuildRecord, BuildStatus } from "@/types/build"
+import type { BuildRecord, BuildStatus, Environment } from "@/types/build"
+
+const ENV_LABEL: Record<Environment, string> = {
+  prod: "PROD",
+  test: "TEST",
+  dev: "DEV",
+}
+
+const ENV_CLASS: Record<Environment, string> = {
+  prod: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
+  test: "bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300",
+  dev: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+}
 
 const STATUS_VARIANT: Record<
   BuildStatus,
@@ -85,6 +97,7 @@ export function BuildTable({
             <TableHead>Version saisie</TableHead>
             <TableHead>Version résolue</TableHead>
             <TableHead>Packages</TableHead>
+            <TableHead>Env.</TableHead>
             <TableHead>Statut</TableHead>
             <TableHead>Démarré</TableHead>
             <TableHead>Terminé</TableHead>
@@ -122,6 +135,17 @@ export function BuildTable({
                       </Badge>
                     ))}
                   </div>
+                </TableCell>
+                <TableCell>
+                  {build.environment ? (
+                    <span
+                      className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs font-semibold ${ENV_CLASS[build.environment]}`}
+                    >
+                      {ENV_LABEL[build.environment]}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )}
                 </TableCell>
                 <TableCell>
                   <Badge variant={STATUS_VARIANT[build.status]}>

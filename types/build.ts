@@ -1,3 +1,7 @@
+import type { Environment } from "@/lib/env"
+
+export type { Environment }
+
 export type LogType = "log" | "error" | "warning" | "done" | "progress"
 
 export interface LogEntry {
@@ -18,4 +22,5 @@ export interface BuildRecord {
   startedAt: string
   endedAt?: string
   outputDir: string
+  environment: Environment
 }

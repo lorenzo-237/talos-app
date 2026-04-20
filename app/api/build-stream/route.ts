@@ -17,7 +17,7 @@ import type { LogEntry } from "@/types/build"
  * history before receiving live updates.
  */
 export async function GET(request: NextRequest): Promise<Response> {
-  const auth = requireAuth(request, "canBuild")
+  const auth = requireAuth(request)
   if (auth instanceof NextResponse) return auth as Response
 
   const buildId = request.nextUrl.searchParams.get("buildId")

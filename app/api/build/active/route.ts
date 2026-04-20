@@ -11,7 +11,7 @@ import { requestCancellation } from "@/lib/build-cancellation"
  * build and connect to its log stream — regardless of who launched it.
  */
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  const auth = requireAuth(req, "canBuild")
+  const auth = requireAuth(req)
   if (auth instanceof NextResponse) return auth
 
   return NextResponse.json({ builds: await runningBuilds.getAll() })
@@ -27,8 +27,13 @@ const cancelSchema = z.object({ buildId: z.string().min(1) })
  * The SSE stream will still emit a "done" event once cleanup completes.
  */
 export async function DELETE(req: NextRequest): Promise<NextResponse> {
-  const auth = requireAuth(req, "canBuild")
+  const auth = requireAuth(req)
   if (auth instanceof NextResponse) return auth
+
+  const { rights } = auth
+  if (!rights.canBuildProd && !rights.canBuildTest && !rights.canBuildDev) {
+    return NextResponse.json({ error: "Droits insuffisants" }, { status: 403 })
+  }
 
   try {
     const body = await req.json()

@@ -12,7 +12,9 @@ export interface UserProfile {
 }
 
 export interface UserRights {
-  canBuild: boolean
+  canBuildProd: boolean
+  canBuildTest: boolean
+  canBuildDev: boolean
   canReadPackages: boolean
   canWritePackages: boolean
   canDeletePackages: boolean
@@ -20,6 +22,9 @@ export interface UserRights {
   canWriteExplorer: boolean
   canDeleteExplorer: boolean
   canViewHistory: boolean
+  canReadReleases: boolean
+  canMoveReleases: boolean
+  canDeleteReleases: boolean
 }
 
 export interface AuthUser {
@@ -41,7 +46,9 @@ export interface UserMeResponse {
 }
 
 const ALL_RIGHTS: UserRights = {
-  canBuild: true,
+  canBuildProd: true,
+  canBuildTest: true,
+  canBuildDev: true,
   canReadPackages: true,
   canWritePackages: true,
   canDeletePackages: true,
@@ -49,6 +56,9 @@ const ALL_RIGHTS: UserRights = {
   canWriteExplorer: true,
   canDeleteExplorer: true,
   canViewHistory: true,
+  canReadReleases: true,
+  canMoveReleases: true,
+  canDeleteReleases: true,
 }
 
 export function deriveRights(me: UserMeResponse): UserRights {
@@ -63,7 +73,9 @@ export function deriveRights(me: UserMeResponse): UserRights {
   // talos-read = droit d'accès de base ; sans lui, aucune fonctionnalité
   if (!codes.has("talos-read")) {
     return {
-      canBuild: false,
+      canBuildProd: false,
+      canBuildTest: false,
+      canBuildDev: false,
       canReadPackages: false,
       canWritePackages: false,
       canDeletePackages: false,
@@ -71,11 +83,16 @@ export function deriveRights(me: UserMeResponse): UserRights {
       canWriteExplorer: false,
       canDeleteExplorer: false,
       canViewHistory: false,
+      canReadReleases: false,
+      canMoveReleases: false,
+      canDeleteReleases: false,
     }
   }
 
   return {
-    canBuild: codes.has("talos-build"),
+    canBuildProd: codes.has("talos-build-prod"),
+    canBuildTest: codes.has("talos-build-test"),
+    canBuildDev: codes.has("talos-build-dev"),
     canReadPackages: codes.has("talos-pkg-read"),
     canWritePackages: codes.has("talos-pkg-write"),
     canDeletePackages: codes.has("talos-pkg-delete"),
@@ -83,6 +100,9 @@ export function deriveRights(me: UserMeResponse): UserRights {
     canWriteExplorer: codes.has("talos-exp-write"),
     canDeleteExplorer: codes.has("talos-exp-delete"),
     canViewHistory: codes.has("talos-history"),
+    canReadReleases: codes.has("talos-releases-read"),
+    canMoveReleases: codes.has("talos-releases-move"),
+    canDeleteReleases: codes.has("talos-releases-delete"),
   }
 }
 

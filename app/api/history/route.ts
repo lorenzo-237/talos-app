@@ -22,8 +22,13 @@ const deleteSchema = z.union([
 ])
 
 export async function DELETE(req: NextRequest): Promise<NextResponse> {
-  const auth = requireAuth(req, "canBuild")
+  const auth = requireAuth(req)
   if (auth instanceof NextResponse) return auth
+
+  const { rights } = auth
+  if (!rights.canBuildProd && !rights.canBuildTest && !rights.canBuildDev) {
+    return NextResponse.json({ error: "Droits insuffisants" }, { status: 403 })
+  }
 
   try {
     const body = await req.json()

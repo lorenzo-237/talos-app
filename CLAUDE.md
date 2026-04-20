@@ -26,10 +26,12 @@ npm run typecheck    # TypeScript check (no emit)
 Requires a `.env.local` file at the root:
 
 ```env
-SRC_DIR=C:/path/to/src           # Source resources directory
-OUTPUT_DIR=C:/path/to/output     # Where generated archives are saved
-PACKAGES_DIR=C:/path/to/packages # Package definition JSON files
-LDAP_API_URL=https://ldap-api... # Base URL of the LDAP authentication API
+SRC_DIR=C:/path/to/src                # Source resources directory
+OUTPUT_DIR_PROD=C:/path/to/output/prod # Where PROD archives are saved
+OUTPUT_DIR_TEST=C:/path/to/output/test # Where TEST archives are saved
+OUTPUT_DIR_DEV=C:/path/to/output/dev   # Where DEV archives are saved
+PACKAGES_DIR=C:/path/to/packages       # Package definition JSON files
+LDAP_API_URL=https://ldap-api...       # Base URL of the LDAP authentication API
 ```
 
 These are validated at runtime via Zod in `lib/env.ts`.
@@ -38,10 +40,11 @@ These are validated at runtime via Zod in `lib/env.ts`.
 
 ### Routing (Next.js App Router only — never mix with Pages Router)
 
-- `/` — Build page (version input + package selection + real-time logs)
+- `/` — Build page (version input + environment selector + package selection + real-time logs)
 - `/packages` — JSON package editor (Monaco Editor)
 - `/explorer` — SRC_DIR file browser
 - `/history` — Build history
+- `/releases` — Generated archives browser (list, move between envs, delete)
 - `/login` — Login form (LDAP credentials)
 - `/unauthorized` — Shown when user lacks required rights
 
@@ -67,6 +70,9 @@ These are validated at runtime via Zod in `lib/env.ts`.
 | `/api/history/[buildId]`                 | GET            | Get a single build record                            |
 | `/api/history/[buildId]/data-logs`       | GET            | Get persisted logs for a completed build             |
 | `/api/explorer`                          | GET/DELETE     | Browse/delete files in SRC_DIR                       |
+| `/api/releases`                          | GET/DELETE     | List/delete package folders per env                  |
+| `/api/releases/browse`                   | GET            | Browse output dir tree (`?env=&path=`)               |
+| `/api/releases/move`                     | POST           | Move a package folder between environments           |
 
 ### Authentication & Rights (`lib/auth.ts`, `lib/api-auth.ts`)
 
@@ -74,15 +80,19 @@ Login proxies credentials to the LDAP API (`LDAP_API_URL`), fetches the user pro
 
 Rights are derived from `adsion_droitsMps` LDAP attribute codes:
 - `talos-read` — base access (required; without it all rights are false)
-- `talos-build`, `talos-pkg-read/write/delete`, `talos-exp-read/write/delete`, `talos-history`
+- `talos-build-prod`, `talos-build-test`, `talos-build-dev` — build per environment
+- `talos-pkg-read/write/delete`, `talos-exp-read/write/delete`, `talos-history`
+- `talos-releases-read`, `talos-releases-move`, `talos-releases-delete`
 
 Admins (`isAdmin` / `isSuperuser` / `profiles.api[].isAdmin`) get all rights unconditionally.
 
-API route protection uses `requireAuth(req, "canBuild")` from `lib/api-auth.ts`. It reads the `talos_token` and `talos_rights` cookies — no JWT decoding, rights are trusted from the cookie.
+API route protection uses `requireAuth(req, "canBuildTest")` from `lib/api-auth.ts`. It reads the `talos_token` and `talos_rights` cookies — no JWT decoding, rights are trusted from the cookie.
+
+`lib/env.ts` exports `getOutputDir(env: Environment): string` to resolve the correct output directory for a given environment (`prod` | `test` | `dev`).
 
 ### Core Library (`lib/`)
 
-- **`env.ts`** — Zod-validated env vars export
+- **`env.ts`** — Zod-validated env vars export; exports `Environment` type and `getOutputDir(env)`
 - **`version-resolver.ts`** — Resolves `3.3.3.1` → `3.3.3` by progressively dropping version segments until a matching folder in PACKAGES_DIR is found
 - **`placeholder-resolver.ts`** — Resolves `{version}`, `{version-1}` through `{version-4}` in strings; `{version-N}` = first N segments joined with dots
 - **`archive-builder.ts`** — Main build orchestrator: creates temp dir, builds archives recursively, processes install section, cleans up

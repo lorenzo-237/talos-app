@@ -3,7 +3,7 @@ import { z } from "zod"
 import { v4 as uuidv4 } from "uuid"
 import fs from "fs/promises"
 import path from "path"
-import { env } from "@/lib/env"
+import { env, getOutputDir } from "@/lib/env"
 import { resolvePackageFolder } from "@/lib/version-resolver"
 import { BuildLogger, buildRegistry } from "@/lib/build-logger"
 import { buildPackage } from "@/lib/archive-builder"
@@ -12,7 +12,7 @@ import { PackageDefinitionSchema } from "@/types/package-schema"
 import { runningBuilds } from "@/lib/running-builds"
 import { requireAuth } from "@/lib/api-auth"
 import { isCancelled, clearCancellation } from "@/lib/build-cancellation"
-import type { BuildStatus } from "@/types/build"
+import type { BuildStatus, Environment } from "@/types/build"
 
 // Simple concurrency guard — prevents double-building same version+package
 // Anchored on globalThis so Turbopack hot-reloads don't create a fresh instance
@@ -23,14 +23,22 @@ const activeBuilds: Set<string> =
   globalThis.__activeBuilds ?? new Set()
 globalThis.__activeBuilds = activeBuilds
 
+const ENV_RIGHT = {
+  prod: "canBuildProd",
+  test: "canBuildTest",
+  dev: "canBuildDev",
+} as const
+
 const buildSchema = z.object({
   version: z.string().min(1),
   packages: z.array(z.string()).min(1),
+  environment: z.enum(["prod", "test", "dev"]).default("test"),
   keepTemp: z.boolean().optional().default(false),
 })
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const auth = requireAuth(req, "canBuild")
+  // Check basic auth first (any authenticated user)
+  const auth = requireAuth(req)
   if (auth instanceof NextResponse) return auth
 
   try {
@@ -43,7 +51,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       )
     }
 
-    const { version, packages, keepTemp } = parsed.data
+    const { version, packages, environment, keepTemp } = parsed.data
+
+    // Check the right for the requested environment
+    const requiredRight = ENV_RIGHT[environment]
+    if (!auth.rights[requiredRight]) {
+      return NextResponse.json(
+        { error: `Droits insuffisants pour builder en ${environment.toUpperCase()}` },
+        { status: 403 }
+      )
+    }
 
     let resolved
     try {
@@ -70,6 +87,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       )
     }
 
+    const outputDir = getOutputDir(environment as Environment)
     const buildId = uuidv4()
     const startedAt = new Date().toISOString()
     const logger = new BuildLogger()
@@ -91,7 +109,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       packages,
       status: "running" as BuildStatus,
       startedAt,
-      outputDir: env.OUTPUT_DIR,
+      outputDir,
+      environment: environment as Environment,
     }
     await appendHistory(record)
 
@@ -128,7 +147,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           }
 
           try {
-            const output = path.join(env.OUTPUT_DIR, version)
+            const output = path.join(outputDir, version)
             await buildPackage(
               pkgDef,
               resolved.resolvedVersion,

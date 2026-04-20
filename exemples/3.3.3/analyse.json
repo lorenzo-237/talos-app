@@ -1,0 +1,10 @@
+{
+  "output": "ANALYSE",
+  "directories": [
+    { "name": "{version-3}\\Medoc\\analyses", "onlyContent": true }
+  ],
+  "callbacks": {
+    "exec": [],
+    "actions": []
+  }
+}

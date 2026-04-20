@@ -8,7 +8,7 @@
       {
         "name": "windev-forge.exe",
         "dir": "windows",
-        "args": "-id={buildId} -action=generation-tables -f=\"{directories}\\{version-3}\\Medoc\\Analyse_Medoc.wdd\" -version=3 -output=\"{default_output}\" -l=\"{cwd_data}\""
+        "args": "-id={buildId} -action=generation-tables -f=\"{directories}\\{version-3}\\Medoc\\analyses\\Analyse_Medoc.wdd\" -version=3 -output=\"{default_output}\" -l=\"{cwd_data}\""
       }
     ],
     "actions": ["rename-minus"]

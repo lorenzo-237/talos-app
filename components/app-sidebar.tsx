@@ -10,6 +10,7 @@ import {
   Anvil,
   LogOut,
   ShieldCheck,
+  Archive,
 } from "lucide-react"
 import {
   Sidebar,
@@ -60,6 +61,12 @@ const navItems: NavItem[] = [
     label: "Historique",
     icon: History,
     right: "canViewHistory",
+  },
+  {
+    href: "/releases",
+    label: "Releases",
+    icon: Archive,
+    right: "canReadReleases",
   },
 ]
 

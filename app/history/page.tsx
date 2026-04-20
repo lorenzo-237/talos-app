@@ -171,8 +171,10 @@ export default function HistoryPage() {
         </Button>
       </div>
 
-      {/* Deletion toolbar — only for users who can build */}
-      {rights.canBuild && !loading && builds.length > 0 && (
+      {/* Deletion toolbar — only for users who can build in at least one env */}
+      {(rights.canBuildProd || rights.canBuildTest || rights.canBuildDev) &&
+        !loading &&
+        builds.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 px-4 py-3">
           {/* ── By selection ── */}
           <div className="flex items-center gap-2">

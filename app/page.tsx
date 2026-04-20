@@ -8,22 +8,49 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { useRights } from "@/contexts/auth-context"
 import { apiFetch } from "@/lib/api-fetch"
 import { useBuildStream } from "@/hooks/useBuildStream"
 import { usePackageSearch } from "@/hooks/usePackageSearch"
 import { PackageSelector } from "@/components/build/PackageSelector"
 import { BuildLogs } from "@/components/build/BuildLogs"
+import type { Environment } from "@/types/build"
+
+const ENV_LABELS: Record<Environment, string> = {
+  prod: "PROD",
+  test: "TEST",
+  dev: "DEV",
+}
+
+const ENV_RIGHT: Record<Environment, "canBuildProd" | "canBuildTest" | "canBuildDev"> = {
+  prod: "canBuildProd",
+  test: "canBuildTest",
+  dev: "canBuildDev",
+}
 
 export default function BuildPage() {
   const [version, setVersion] = React.useState("")
   const [selectedPackages, setSelectedPackages] = React.useState<Set<string>>(
     new Set()
   )
+  const [environment, setEnvironment] = React.useState<Environment>("test")
   const [keepTemp, setKeepTemp] = React.useState(false)
 
   const rights = useRights()
   const versionValid = /^\d+(\.\d+){2,3}$/.test(version.trim())
+
+  // Environments the user is allowed to build in
+  const availableEnvs = (["prod", "test", "dev"] as Environment[]).filter(
+    (e) => rights[ENV_RIGHT[e]]
+  )
+  const canBuildInEnv = rights[ENV_RIGHT[environment]]
 
   const {
     logs,
@@ -77,6 +104,7 @@ export default function BuildPage() {
         body: JSON.stringify({
           version: version.trim(),
           packages: [...selectedPackages],
+          environment,
           keepTemp,
         }),
       })
@@ -145,7 +173,7 @@ export default function BuildPage() {
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
               <span className="text-sm font-medium">Build en cours…</span>
             </div>
-            {rights.canBuild && (
+            {canBuildInEnv && (
               <Button
                 variant="ghost"
                 size="xs"
@@ -191,32 +219,55 @@ export default function BuildPage() {
         </div>
       ) : (
         <>
-          {/* ── Version search form ──────────────────────────────────────────── */}
-          <div className="space-y-2">
-            <Label htmlFor="version">Version</Label>
-            <div className="flex gap-2">
-              <Input
-                id="version"
-                placeholder="ex. 3.3.3.1"
-                value={version}
-                onChange={(e) => setVersion(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                className="max-w-xs"
-              />
-              {rights.canReadPackages && (
-                <Button
-                  onClick={handleSearch}
-                  disabled={!versionValid || searching}
-                >
-                  {searching ? (
-                    <Loader2 className="animate-spin" />
-                  ) : (
-                    <Search />
-                  )}
-                  Rechercher
-                </Button>
-              )}
+          {/* ── Version + environment form ───────────────────────────────────── */}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="version">Version</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="version"
+                  placeholder="ex. 3.3.3.1"
+                  value={version}
+                  onChange={(e) => setVersion(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                  className="max-w-xs"
+                />
+                {rights.canReadPackages && (
+                  <Button
+                    onClick={handleSearch}
+                    disabled={!versionValid || searching}
+                  >
+                    {searching ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      <Search />
+                    )}
+                    Rechercher
+                  </Button>
+                )}
+              </div>
             </div>
+
+            {availableEnvs.length > 0 && (
+              <div className="space-y-2">
+                <Label htmlFor="environment">Environnement cible</Label>
+                <Select
+                  value={environment}
+                  onValueChange={(v) => setEnvironment(v as Environment)}
+                >
+                  <SelectTrigger id="environment" className="w-36">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableEnvs.map((e) => (
+                      <SelectItem key={e} value={e}>
+                        {ENV_LABELS[e]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           {packagesResult && (
@@ -225,7 +276,7 @@ export default function BuildPage() {
               selectedPackages={selectedPackages}
               keepTemp={keepTemp}
               building={building}
-              canBuild={rights.canBuild}
+              canBuild={canBuildInEnv}
               onToggle={togglePackage}
               onSelectAll={selectAll}
               onDeselectAll={deselectAll}
