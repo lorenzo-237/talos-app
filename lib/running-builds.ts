@@ -17,6 +17,7 @@ export interface RunningBuildInfo {
   resolvedVersion: string
   packages: string[]
   startedAt: string // ISO string
+  cancelRequested?: boolean
 }
 
 interface PersistedState {
@@ -57,6 +58,14 @@ export const runningBuilds = {
   /** Register a build as started. Call this right after creating the buildId. */
   async add(info: RunningBuildInfo): Promise<void> {
     await writeState({ pid: process.pid, build: info })
+  },
+
+  /** Mark the build as cancel-requested in the persisted state. */
+  async requestCancel(buildId: string): Promise<void> {
+    const state = await readState()
+    if (state?.build.buildId === buildId) {
+      await writeState({ ...state, build: { ...state.build, cancelRequested: true } })
+    }
   },
 
   /** Unregister a build. Call this in the finally block of the build task. */

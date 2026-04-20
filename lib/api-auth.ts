@@ -1,5 +1,7 @@
+import { createHmac, timingSafeEqual } from "crypto"
 import { type NextRequest, NextResponse } from "next/server"
 import { AUTH_TOKEN_COOKIE, type UserRights } from "@/lib/auth"
+import { env } from "@/lib/env"
 
 export const RIGHTS_COOKIE = "talos_rights"
 
@@ -11,13 +13,37 @@ export const RIGHTS_COOKIE_OPTIONS = {
   path: "/",
 }
 
+/**
+ * Serialize and HMAC-sign the rights object.
+ * Format: base64url(json).base64url(hmac)
+ */
 export function serializeRights(rights: UserRights): string {
-  return JSON.stringify(rights)
+  const payload = Buffer.from(JSON.stringify(rights)).toString("base64url")
+  const sig = createHmac("sha256", env.RIGHTS_SECRET)
+    .update(payload)
+    .digest("base64url")
+  return `${payload}.${sig}`
 }
 
+/**
+ * Verify the HMAC signature and return the rights, or null if invalid.
+ */
 export function parseRights(raw: string): UserRights | null {
   try {
-    return JSON.parse(raw) as UserRights
+    const dot = raw.lastIndexOf(".")
+    if (dot === -1) return null
+    const payload = raw.slice(0, dot)
+    const sig = raw.slice(dot + 1)
+    const expected = createHmac("sha256", env.RIGHTS_SECRET)
+      .update(payload)
+      .digest("base64url")
+    if (
+      sig.length !== expected.length ||
+      !timingSafeEqual(Buffer.from(sig), Buffer.from(expected))
+    ) {
+      return null
+    }
+    return JSON.parse(Buffer.from(payload, "base64url").toString()) as UserRights
   } catch {
     return null
   }

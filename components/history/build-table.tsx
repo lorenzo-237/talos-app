@@ -22,6 +22,7 @@ const STATUS_VARIANT: Record<
   partial: "secondary",
   error: "destructive",
   running: "outline",
+  cancelled: "secondary",
 }
 
 const STATUS_LABEL: Record<BuildStatus, string> = {
@@ -29,6 +30,7 @@ const STATUS_LABEL: Record<BuildStatus, string> = {
   partial: "Partiel",
   error: "Erreur",
   running: "En cours",
+  cancelled: "Annulé",
 }
 
 function formatDate(iso: string): string {

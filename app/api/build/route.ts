@@ -8,12 +8,20 @@ import { resolvePackageFolder } from "@/lib/version-resolver"
 import { BuildLogger, buildRegistry } from "@/lib/build-logger"
 import { buildPackage } from "@/lib/archive-builder"
 import { appendHistory, updateHistoryRecord, saveBuildLogs } from "@/lib/history"
+import { PackageDefinitionSchema } from "@/types/package-schema"
 import { runningBuilds } from "@/lib/running-builds"
 import { requireAuth } from "@/lib/api-auth"
+import { isCancelled, clearCancellation } from "@/lib/build-cancellation"
 import type { BuildStatus } from "@/types/build"
 
 // Simple concurrency guard — prevents double-building same version+package
-const activeBuilds = new Set<string>()
+// Anchored on globalThis so Turbopack hot-reloads don't create a fresh instance
+declare global {
+  var __activeBuilds: Set<string> | undefined
+}
+const activeBuilds: Set<string> =
+  globalThis.__activeBuilds ?? new Set()
+globalThis.__activeBuilds = activeBuilds
 
 const buildSchema = z.object({
   version: z.string().min(1),
@@ -51,6 +59,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       )
     }
 
+    // Check concurrency BEFORE any registration to avoid orphaned history records
+    const lockKey = `${resolved.resolvedVersion}:${packages.join(",")}`
+    if (activeBuilds.has(lockKey)) {
+      return NextResponse.json(
+        {
+          error: `Build already running for version ${resolved.resolvedVersion} with these packages`,
+        },
+        { status: 409 }
+      )
+    }
+
     const buildId = uuidv4()
     const startedAt = new Date().toISOString()
     const logger = new BuildLogger()
@@ -79,28 +98,29 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // Run build in background (no await)
     ;(async () => {
       let finalStatus: BuildStatus = "success"
-      const lockKey = `${resolved.resolvedVersion}:${packages.join(",")}`
-
-      if (activeBuilds.has(lockKey)) {
-        logger.error(
-          `Build already running for version ${resolved.resolvedVersion} with these packages`
-        )
-        logger.done()
-        await updateHistoryRecord(buildId, {
-          status: "error",
-          endedAt: new Date().toISOString(),
-        })
-        return
-      }
 
       activeBuilds.add(lockKey)
       try {
         for (const pkgName of packages) {
+          if (isCancelled(buildId)) {
+            logger.warn("Build annulé par l'opérateur")
+            finalStatus = "cancelled"
+            break
+          }
+
           const pkgFile = path.join(resolved.folder, `${pkgName}.json`)
           let pkgDef
           try {
             const raw = await fs.readFile(pkgFile, "utf-8")
-            pkgDef = JSON.parse(raw)
+            const parsed = PackageDefinitionSchema.safeParse(JSON.parse(raw))
+            if (!parsed.success) {
+              logger.error(
+                `Package "${pkgName}" invalide : ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join(", ")}`
+              )
+              finalStatus = "partial"
+              continue
+            }
+            pkgDef = parsed.data
           } catch (err) {
             logger.error(`Could not read package "${pkgName}": ${err}`)
             finalStatus = "partial"
@@ -125,6 +145,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           }
         }
       } finally {
+        clearCancellation(buildId)
         activeBuilds.delete(lockKey)
         await runningBuilds.remove(buildId)
         logger.done()

@@ -9,7 +9,12 @@ import {
   buildAuthUser,
   type UserMeResponse,
 } from "@/lib/auth"
-import { RIGHTS_COOKIE, RIGHTS_COOKIE_OPTIONS, serializeRights } from "@/lib/api-auth"
+import {
+  RIGHTS_COOKIE,
+  RIGHTS_COOKIE_OPTIONS,
+  serializeRights,
+} from "@/lib/api-auth"
+import setCookie from "set-cookie-parser"
 
 const loginSchema = z.object({
   uid: z.string().min(1),
@@ -43,6 +48,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       body: JSON.stringify({ uid, password, remember_me }),
     })
 
+    const cookies = setCookie.parse(loginRes.headers.getSetCookie())
+    let refresh_token
+    if (remember_me) {
+      refresh_token = cookies.find((c) => c.name === "refresh_token")?.value
+    }
+
     if (!loginRes.ok) {
       const data = await loginRes.json().catch(() => null)
       if (loginRes.status === 422 && data?.detail?.[0]?.msg) {
@@ -59,6 +70,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       token: string
       refresh_token?: string
     }
+
+    loginData.refresh_token = refresh_token
 
     // Fetch profile + rights
     const meRes = await fetch(`${env.LDAP_API_URL}/api/v1/users/me`, {

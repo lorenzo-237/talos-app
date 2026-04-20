@@ -31,8 +31,7 @@ async function processDirectoryNode(
   version: string,
   srcDir: string,
   destDir: string,
-  logger: BuildLogger,
-  installMode = false // when true, srcDir base is SRC_DIR/install/
+  logger: BuildLogger
 ): Promise<void> {
   const resolvedName = node.name
     ? resolvePlaceholders(node.name, version)
@@ -50,17 +49,11 @@ async function processDirectoryNode(
 
   // C. Copy base source directory (only if name is defined)
   if (resolvedName) {
-    const baseDir = installMode
-      ? path.join(
-          srcDir,
-          "directories",
-          ...path.normalize(resolvedName).split(path.sep)
-        )
-      : path.join(
-          srcDir,
-          "directories",
-          ...path.normalize(resolvedName).split(path.sep)
-        )
+    const baseDir = path.join(
+      srcDir,
+      "directories",
+      ...path.normalize(resolvedName).split(path.sep)
+    )
     if (await pathExists(baseDir)) {
       try {
         await copyDir(baseDir, target)
@@ -75,9 +68,7 @@ async function processDirectoryNode(
   // D. wdlls
   if (node.wdlls) {
     for (const w of node.wdlls) {
-      const wdllsSrc = installMode
-        ? path.join(srcDir, "wdlls", String(w.version))
-        : path.join(srcDir, "wdlls", String(w.version))
+      const wdllsSrc = path.join(srcDir, "wdlls", String(w.version))
       if (await pathExists(wdllsSrc)) {
         try {
           await copyDir(wdllsSrc, target)
@@ -111,11 +102,9 @@ async function processDirectoryNode(
   if (node.files) {
     for (const filePath of node.files) {
       const resolvedFilePath = resolvePlaceholders(filePath, version)
-      const filesDir = installMode
-        ? path.join(srcDir, "files")
-        : path.join(srcDir, "files")
       const srcFile = path.join(
-        filesDir,
+        srcDir,
+        "files",
         ...path.normalize(resolvedFilePath).split(path.sep)
       )
       const fileName = path.basename(resolvedFilePath)
@@ -137,10 +126,6 @@ async function processDirectoryNode(
     for (const iniDef of node.inis) {
       const destIniPath = path.join(target, iniDef.name)
       try {
-        // For install mode, use srcDir directly as the base (SRC_DIR/install/...)
-        // The processIni always reads from SRC_DIR/files/inis/ - we pass the actual SRC_DIR here
-        // When in install mode, srcDir is already SRC_DIR/install/, but inis come from SRC_DIR/files/inis/
-        // So we need to pass the real srcDir. We'll handle this by keeping a reference to the real srcDir.
         await processIni(iniDef, version, srcDir, destIniPath)
       } catch (err) {
         logger.warn(`Could not process ini "${iniDef.name}": ${err}`)
@@ -151,14 +136,7 @@ async function processDirectoryNode(
   // H. child directories (recursive)
   if (node.directories) {
     for (const child of node.directories) {
-      await processDirectoryNode(
-        child,
-        version,
-        srcDir,
-        target,
-        logger,
-        installMode
-      )
+      await processDirectoryNode(child, version, srcDir, target, logger)
     }
   }
 }
@@ -272,16 +250,41 @@ async function processInstallSection(
   if (installSection.directories) {
     const installSrcDir = path.join(srcDir, "install")
     for (const node of installSection.directories) {
-      await processDirectoryNode(
-        node,
-        version,
-        installSrcDir,
-        destDir,
-        logger,
-        true
-      )
+      await processDirectoryNode(node, version, installSrcDir, destDir, logger)
     }
   }
+}
+
+/**
+ * Split a shell-style argument string into an array of tokens.
+ * Handles single- and double-quoted segments.
+ */
+function parseArgs(str: string): string[] {
+  const args: string[] = []
+  let current = ""
+  let inQuote = false
+  let quoteChar = ""
+  for (const ch of str) {
+    if (inQuote) {
+      if (ch === quoteChar) {
+        inQuote = false
+      } else {
+        current += ch
+      }
+    } else if (ch === '"' || ch === "'") {
+      inQuote = true
+      quoteChar = ch
+    } else if (ch === " ") {
+      if (current) {
+        args.push(current)
+        current = ""
+      }
+    } else {
+      current += ch
+    }
+  }
+  if (current) args.push(current)
+  return args
 }
 
 /**
@@ -309,7 +312,7 @@ async function processCallbacks(
       const resolvedArgs = resolvePlaceholders(entry.args, version, context)
       logger.log(`Executing: ${entry.name} ${resolvedArgs}`)
       try {
-        await execa(`"${exePath}" ${resolvedArgs}`, { shell: true })
+        await execa(exePath, parseArgs(resolvedArgs))
       } catch (err) {
         logger.error(`Exec "${entry.name}" failed: ${err}`)
         throw err

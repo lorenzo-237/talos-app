@@ -7,7 +7,7 @@ export interface LogEntry {
   progress?: { current: number; total: number }
 }
 
-export type BuildStatus = "running" | "success" | "error" | "partial"
+export type BuildStatus = "running" | "success" | "error" | "partial" | "cancelled"
 
 export interface BuildRecord {
   buildId: string
