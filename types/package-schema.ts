@@ -25,11 +25,25 @@ export const IniDefinitionSchema = z.object({
   sections: z.array(IniSectionSchema),
 })
 
+export const PickSubdirDefinitionSchema = z.object({
+  /** Literal version string (e.g. "76") or "$latest" to pick the highest. */
+  value: z.string().min(1),
+  /** Ini filename located inside the picked version subfolder. */
+  ini: z.string().min(1),
+  /** Ini section containing the verification key. */
+  section: z.string().min(1),
+  /** Ini key whose value must match the picked subfolder name. */
+  key: z.string().min(1),
+  /** Name to use for the destination directory. */
+  destName: z.string().min(1),
+})
+
 // DirectoryNode is recursive — use z.lazy()
 export const DirectoryNodeSchema: z.ZodType<DirectoryNode> = z.lazy(() =>
   z.object({
     name: z.string().optional(),
     onlyContent: z.boolean().optional(),
+    pickSubdir: PickSubdirDefinitionSchema.optional(),
     wdlls: z.array(WdllsEntrySchema).optional(),
     dlls: z.array(DllsEntrySchema).optional(),
     files: z.array(z.string()).optional(),
@@ -116,9 +130,18 @@ export interface ArchiveDefinition {
   archives?: ArchiveDefinition[]
 }
 
+export interface PickSubdirDefinition {
+  value: string
+  ini: string
+  section: string
+  key: string
+  destName: string
+}
+
 export interface DirectoryNode {
   name?: string
   onlyContent?: boolean
+  pickSubdir?: PickSubdirDefinition
   directories?: DirectoryNode[]
   wdlls?: WdllsEntry[]
   dlls?: DllsEntry[]

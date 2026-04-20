@@ -1,6 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { execa } from "execa"
+import ini from "ini"
 import {
   resolvePlaceholders,
   type PlaceholderContext,
@@ -15,6 +16,37 @@ import type {
   InstallSection,
   CallbacksDefinition,
 } from "@/types/package-schema"
+
+/**
+ * Resolve which version subfolder to use for a pickSubdir node.
+ * Returns the subfolder name, or null if nothing was found.
+ */
+async function resolvePickSubdirVersion(
+  parentDir: string,
+  value: string
+): Promise<string | null> {
+  if (value !== "$latest") return value
+
+  let subdirs: string[]
+  try {
+    const entries = await fs.readdir(parentDir, { withFileTypes: true })
+    subdirs = entries.filter((e) => e.isDirectory()).map((e) => e.name)
+  } catch {
+    return null
+  }
+
+  if (subdirs.length === 0) return null
+
+  // Sort numerically descending (versions are integers per spec)
+  subdirs.sort((a, b) => {
+    const na = parseInt(a, 10)
+    const nb = parseInt(b, 10)
+    if (!isNaN(na) && !isNaN(nb)) return nb - na
+    return b.localeCompare(a)
+  })
+
+  return subdirs[0]
+}
 
 /**
  * Process a DirectoryNode recursively into destDir.
@@ -36,6 +68,77 @@ async function processDirectoryNode(
   const resolvedName = node.name
     ? resolvePlaceholders(node.name, version)
     : undefined
+
+  // ── pickSubdir: select a versioned subfolder by value or "$latest" ──────────
+  if (node.pickSubdir && resolvedName) {
+    const { value, ini: iniFile, section, key, destName } = node.pickSubdir
+
+    const parentDir = path.join(
+      srcDir,
+      "directories",
+      ...path.normalize(resolvedName).split(path.sep)
+    )
+
+    const resolvedVersion = await resolvePickSubdirVersion(parentDir, value)
+    if (!resolvedVersion) {
+      logger.warn(
+        `pickSubdir: aucun sous-dossier trouvé dans "${resolvedName}" (value="${value}")`
+      )
+      return
+    }
+
+    const versionedDir = path.join(parentDir, resolvedVersion)
+    if (!(await pathExists(versionedDir))) {
+      logger.warn(
+        `pickSubdir: dossier introuvable "${resolvedName}/${resolvedVersion}"`
+      )
+      return
+    }
+
+    // ── Ini verification ─────────────────────────────────────────────────────
+    const iniPath = path.join(versionedDir, iniFile)
+    try {
+      const raw = await fs.readFile(iniPath, "utf-8")
+      const parsed = ini.parse(raw) as Record<string, Record<string, string>>
+      const iniValue = parsed[section]?.[key]?.trim()
+      if (iniValue === undefined) {
+        logger.warn(
+          `pickSubdir: clé [${section}] ${key} absente dans "${resolvedName}/${resolvedVersion}/${iniFile}"`
+        )
+      } else if (iniValue !== resolvedVersion) {
+        logger.warn(
+          `pickSubdir: "${resolvedName}/${resolvedVersion}/${iniFile}" — [${section}] ${key} = "${iniValue}" ≠ nom du dossier "${resolvedVersion}"`
+        )
+      }
+    } catch {
+      logger.warn(
+        `pickSubdir: impossible de lire l'ini de vérification "${resolvedName}/${resolvedVersion}/${iniFile}"`
+      )
+    }
+
+    // ── Determine target and copy ─────────────────────────────────────────────
+    const target =
+      node.onlyContent === true
+        ? destDir
+        : path.join(destDir, destName)
+
+    await fs.mkdir(target, { recursive: true })
+
+    try {
+      await copyDir(versionedDir, target)
+    } catch (err) {
+      logger.warn(
+        `pickSubdir: impossible de copier "${resolvedName}/${resolvedVersion}": ${err}`
+      )
+    }
+
+    // Process remaining node fields (wdlls, dlls, files, inis, child dirs)
+    // against the same target
+    await processDirectoryNodeContent(node, version, srcDir, target, logger)
+    return
+  }
+
+  // ── Standard directory node ───────────────────────────────────────────────
 
   // Determine target directory
   let target: string
@@ -65,6 +168,21 @@ async function processDirectoryNode(
     }
   }
 
+  await processDirectoryNodeContent(node, version, srcDir, target, logger)
+}
+
+/**
+ * Process the content fields of a DirectoryNode (wdlls, dlls, files, inis,
+ * child directories) into an already-resolved target directory.
+ * Called by processDirectoryNode for both standard and pickSubdir paths.
+ */
+async function processDirectoryNodeContent(
+  node: DirectoryNode,
+  version: string,
+  srcDir: string,
+  target: string,
+  logger: BuildLogger
+): Promise<void> {
   // D. wdlls
   if (node.wdlls) {
     for (const w of node.wdlls) {

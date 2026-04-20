@@ -1,0 +1,123 @@
+{
+  "output": "MAJ_MANUELLE_NEW",
+  "install": { "files": ["InstallServeur.exe", "LanceMaj.bat"], "wdlls": [] },
+  "archives": [
+    {
+      "name": "InstallMAJ",
+      "extension": "7z",
+      "wdlls": [{ "version": 27 }],
+      "archives": [],
+      "directories": [
+        {
+          "name": "{version}",
+          "directories": [
+            {
+              "name": "Medoc",
+              "wdlls": [{ "version": 27 }],
+              "directories": [
+                { "name": "{version-3}\\Medoc", "onlyContent": true },
+                {
+                  "name": "tables/Data",
+                  "pickSubdir": {
+                    "value": "$latest",
+                    "ini": "VERSION.INI",
+                    "section": "VERSION",
+                    "key": "TABLE",
+                    "destName": "Data"
+                  }
+                },
+                {
+                  "name": "tables/Tbl_CCAM",
+                  "pickSubdir": {
+                    "value": "$latest",
+                    "ini": "VERSION.INI",
+                    "section": "VERSION",
+                    "key": "TABLE",
+                    "destName": "Tbl_CCAM"
+                  }
+                },
+                {
+                  "name": "tables/Tbl_Reglementaires",
+                  "pickSubdir": {
+                    "value": "$latest",
+                    "ini": "VERSION.INI",
+                    "section": "VERSION",
+                    "key": "TABLE",
+                    "destName": "Tbl_Reglementaires"
+                  }
+                }
+              ],
+              "dlls": [{ "name": "core" }, { "name": "{version-3}" }]
+            },
+            { "name": "Modeles" },
+            {
+              "name": "Tbl_Paramètres",
+              "directories": [
+                { "name": "{version-3}\\Tbl_Paramètres", "onlyContent": true }
+              ]
+            },
+            {
+              "name": "tables/Geographie",
+              "pickSubdir": {
+                "value": "$latest",
+                "ini": "VERSION.INI",
+                "section": "VERSION",
+                "key": "TABLE",
+                "destName": "Geographie"
+              }
+            }
+          ],
+          "files": ["{version-2}\\_HFCS.ZIP"]
+        }
+      ],
+      "files": [
+        "{version-2}\\Install.exe",
+        "{version-2}\\InstallMaj.exe",
+        "{version-2}\\InstallServeur.exe",
+        "JournalEvenement.wdk",
+        "Maj_Calcul_Contrat.exe",
+        "{version-2}\\Medoc_Service.exe",
+        "{version-2}\\Medoc_Service_Gestion.exe",
+        "MessageMap.dll"
+      ],
+      "inis": [
+        {
+          "name": "NEWVERSION.INI",
+          "sections": [
+            {
+              "name": "MEDOC",
+              "keys": [{ "name": "VERSION", "value": "{version}" }]
+            },
+            {
+              "name": "HFSQL",
+              "keys": [
+                { "name": "MAJEUR", "value": "29" },
+                { "name": "MINEUR", "value": "0" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "VERSION.INI",
+          "sections": [
+            {
+              "name": "VERSION",
+              "keys": [
+                { "name": "MEDOC", "value": "{version}" },
+                { "name": "SERVEUR", "value": "90A290076c" },
+                { "name": "MANTA", "value": "29.0.134.0" }
+              ]
+            },
+            {
+              "name": "HFSQL",
+              "keys": [
+                { "name": "MAJEUR", "value": "29" },
+                { "name": "MINEUR", "value": "0" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
