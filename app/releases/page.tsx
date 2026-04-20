@@ -5,17 +5,24 @@ import { toast } from "sonner"
 import {
   Archive,
   ArrowRightLeft,
+  BookMarked,
   ChevronRight,
-  File,
-  FileCode,
+  Database,
+  FileCode2,
   FileText,
   Folder,
   FolderOpen,
+  HardDrive,
   Home,
+  Layers,
   Loader2,
+  Play,
+  Puzzle,
   RefreshCw,
+  Settings2,
   Trash2,
   X,
+  type LucideIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -62,28 +69,30 @@ function formatDate(iso: string): string {
   })
 }
 
-type LucideIcon = React.ComponentType<{ className?: string }>
+const FILE_ICONS: Record<string, { icon: LucideIcon; className: string }> = {
+  exe: { icon: Play, className: "text-orange-400" },
+  wdk: { icon: Puzzle, className: "text-green-500" },
+  fic: { icon: Database, className: "text-cyan-400" },
+  ndx: { icon: BookMarked, className: "text-violet-400" },
+  mmo: { icon: HardDrive, className: "text-blue-400" },
+  dll: { icon: Layers, className: "text-amber-400" },
+  pdf: { icon: FileText, className: "text-red-500" },
+  txt: { icon: FileText, className: "text-muted-foreground" },
+  log: { icon: FileText, className: "text-muted-foreground" },
+  rtf: { icon: FileText, className: "text-blue-400" },
+  doc: { icon: FileText, className: "text-blue-500" },
+  docx: { icon: FileText, className: "text-blue-500" },
+  ini: { icon: Settings2, className: "text-muted-foreground" },
+  cfg: { icon: Settings2, className: "text-muted-foreground" },
+  zip: { icon: Archive, className: "text-yellow-500" },
+  "7z": { icon: Archive, className: "text-yellow-500" },
+}
 
-function getFileIcon(name: string): LucideIcon {
+function getFileIcon(name: string): { icon: LucideIcon; className: string } {
   const ext = name.split(".").pop()?.toLowerCase() ?? ""
-  switch (ext) {
-    case "7z":
-    case "zip":
-    case "tar":
-      return Archive
-    case "ini":
-    case "cfg":
-    case "json":
-    case "xml":
-    case "toml":
-      return FileCode
-    case "txt":
-    case "log":
-    case "md":
-      return FileText
-    default:
-      return File
-  }
+  return (
+    FILE_ICONS[ext] ?? { icon: FileCode2, className: "text-muted-foreground" }
+  )
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -224,15 +233,17 @@ export default function ReleasesPage() {
     from: Environment,
     to: Environment,
     version: string,
-    name: string
+    name?: string
   ) {
-    const key = `${from}/${version}/${name}`
+    const key = name ? `${from}/${version}/${name}` : `${from}/${version}`
     setMoving(key)
     try {
       const res = await fetch("/api/releases/move", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from, to, version, name }),
+        body: JSON.stringify(
+          name ? { from, to, version, name } : { from, to, version }
+        ),
       })
       const data = (await res.json()) as { ok?: boolean; error?: string }
       if (!res.ok) {
@@ -240,7 +251,7 @@ export default function ReleasesPage() {
         return
       }
       toast.success(
-        `${name} déplacé de ${ENV_LABELS[from]} vers ${ENV_LABELS[to]}`
+        `${name ?? version} déplacé de ${ENV_LABELS[from]} vers ${ENV_LABELS[to]}`
       )
       await Promise.all([
         browse(from, envStates[from].path),
@@ -262,20 +273,13 @@ export default function ReleasesPage() {
     const { path: currentPath, entries, loading } = envStates[env]
     const depth = currentPath.length
 
-    // At depth 1+, the "active package" is currentPath[1] (if we're browsing inside)
-    // At depth 1, each row is a package → show move/delete
-    // At depth >= 2, we're inside a package → show package action bar
-    const insidePackage = depth >= 2
-    const packageVersion = insidePackage ? currentPath[0] : null
-    const packageName = insidePackage ? currentPath[1] : null
-
     return (
       <div className="space-y-3">
         {/* ── Breadcrumb ──────────────────────────────────────────────────── */}
         <div className="flex items-center gap-1 text-sm">
           <button
             onClick={() => navigateTo(env, [])}
-            className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+            className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
           >
             <Home className="size-3.5" />
           </button>
@@ -284,15 +288,15 @@ export default function ReleasesPage() {
             const targetPath = currentPath.slice(0, i + 1)
             return (
               <React.Fragment key={i}>
-                <ChevronRight className="size-3.5 text-muted-foreground shrink-0" />
+                <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
                 {isLast ? (
-                  <span className="font-medium truncate max-w-48">
+                  <span className="max-w-48 truncate font-medium">
                     {segment}
                   </span>
                 ) : (
                   <button
                     onClick={() => navigateTo(env, targetPath)}
-                    className="text-muted-foreground hover:text-foreground transition-colors truncate max-w-48"
+                    className="max-w-48 truncate text-muted-foreground transition-colors hover:text-foreground"
                   >
                     {segment}
                   </button>
@@ -317,111 +321,6 @@ export default function ReleasesPage() {
           </div>
         </div>
 
-        {/* ── Package action bar (when inside a package) ──────────────────── */}
-        {insidePackage && packageVersion && packageName && (
-          <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
-            <Folder className="size-4 text-muted-foreground shrink-0" />
-            <span className="text-sm font-medium truncate">{packageName}</span>
-            <span className="text-xs text-muted-foreground">
-              ({packageVersion})
-            </span>
-            <div className="ml-auto flex items-center gap-1">
-              {rights.canMoveReleases && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 gap-1.5 text-xs"
-                      disabled={
-                        moving ===
-                        `${env}/${packageVersion}/${packageName}`
-                      }
-                    >
-                      {moving ===
-                      `${env}/${packageVersion}/${packageName}` ? (
-                        <Loader2 className="size-3 animate-spin" />
-                      ) : (
-                        <ArrowRightLeft className="size-3" />
-                      )}
-                      Déplacer vers…
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {otherEnvs(env).map((target) => (
-                      <DropdownMenuItem
-                        key={target}
-                        onClick={() =>
-                          handleMove(
-                            env,
-                            target,
-                            packageVersion,
-                            packageName
-                          )
-                        }
-                      >
-                        <span
-                          className={`mr-2 inline-flex rounded px-1.5 py-0.5 text-xs font-semibold ${ENV_CLASS[target]}`}
-                        >
-                          {ENV_LABELS[target]}
-                        </span>
-                        {ENV_LABELS[target]}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-              {rights.canDeleteReleases &&
-                (confirmDelete?.version === packageVersion &&
-                confirmDelete.name === packageName ? (
-                  <>
-                    <span className="text-xs text-muted-foreground">
-                      Supprimer ?
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      className="h-7"
-                      onClick={() => handleDelete(env)}
-                      disabled={deleting}
-                    >
-                      {deleting ? (
-                        <Loader2 className="animate-spin" />
-                      ) : (
-                        <Trash2 className="size-3" />
-                      )}
-                      Oui
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7"
-                      onClick={() => setConfirmDelete(null)}
-                      disabled={deleting}
-                    >
-                      <X className="size-3" />
-                    </Button>
-                  </>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-destructive"
-                    onClick={() =>
-                      setConfirmDelete({
-                        version: packageVersion,
-                        name: packageName,
-                      })
-                    }
-                  >
-                    <Trash2 className="size-3" />
-                    Supprimer
-                  </Button>
-                ))}
-            </div>
-          </div>
-        )}
-
         <Separator />
 
         {/* ── Entries ─────────────────────────────────────────────────────── */}
@@ -431,11 +330,9 @@ export default function ReleasesPage() {
             Chargement…
           </div>
         ) : entries.length === 0 ? (
-          <p className="py-6 text-sm text-muted-foreground">
-            Dossier vide.
-          </p>
+          <p className="py-6 text-sm text-muted-foreground">Dossier vide.</p>
         ) : (
-          <div className="divide-y rounded-md border overflow-hidden">
+          <div className="divide-y overflow-hidden rounded-md border">
             {entries.map((entry) => {
               const isPackageRow = depth === 1 && entry.isDir
               const moveKey = isPackageRow
@@ -447,25 +344,36 @@ export default function ReleasesPage() {
                 confirmDelete?.version === currentPath[0] &&
                 confirmDelete.name === entry.name
 
-              const Icon: LucideIcon = entry.isDir
-                ? depth === 0
-                  ? Folder
-                  : FolderOpen
-                : getFileIcon(entry.name)
+              const isVersionRow = depth === 0 && entry.isDir
+              const versionMoveKey = isVersionRow
+                ? `${env}/${entry.name}`
+                : null
+              const isVersionMoving =
+                versionMoveKey !== null && moving === versionMoveKey
 
               return (
                 <div
                   key={entry.name}
-                  className="flex items-center gap-3 px-3 py-2 hover:bg-muted/40 transition-colors group"
+                  className="group flex items-center gap-3 px-3 py-2 transition-colors hover:bg-muted/40"
                 >
                   {/* Icon */}
-                  <Icon
-                    className={`size-4 shrink-0 ${
-                      entry.isDir
-                        ? "text-amber-500 dark:text-amber-400"
-                        : "text-muted-foreground"
-                    }`}
-                  />
+                  {entry.isDir
+                    ? (() => {
+                        const FolderIcon = depth === 0 ? Folder : FolderOpen
+                        return (
+                          <FolderIcon className="size-4 shrink-0 text-blue-500" />
+                        )
+                      })()
+                    : (() => {
+                        const { icon: FileIcon, className } = getFileIcon(
+                          entry.name
+                        )
+                        return (
+                          <FileIcon
+                            className={`size-4 shrink-0 ${className}`}
+                          />
+                        )
+                      })()}
 
                   {/* Name — clickable for dirs */}
                   {entry.isDir ? (
@@ -478,24 +386,62 @@ export default function ReleasesPage() {
                       {entry.name}
                     </button>
                   ) : (
-                    <span className="flex-1 truncate text-sm font-mono">
+                    <span className="flex-1 truncate font-mono text-sm">
                       {entry.name}
                     </span>
                   )}
 
                   {/* Meta */}
-                  <span className="shrink-0 text-xs text-muted-foreground hidden sm:block">
-                    {entry.size !== undefined
-                      ? formatSize(entry.size)
-                      : ""}
+                  <span className="hidden shrink-0 text-xs text-muted-foreground sm:block">
+                    {entry.size !== undefined ? formatSize(entry.size) : ""}
                   </span>
-                  <span className="shrink-0 text-xs text-muted-foreground hidden md:block w-32 text-right">
+                  <span className="hidden w-32 shrink-0 text-right text-xs text-muted-foreground md:block">
                     {formatDate(entry.updatedAt)}
                   </span>
 
+                  {/* Version-level actions (depth === 0, dirs only) */}
+                  {isVersionRow && rights.canMoveReleases && (
+                    <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 gap-1 text-xs"
+                            disabled={isVersionMoving}
+                          >
+                            {isVersionMoving ? (
+                              <Loader2 className="size-3 animate-spin" />
+                            ) : (
+                              <ArrowRightLeft className="size-3" />
+                            )}
+                            Déplacer
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {otherEnvs(env).map((target) => (
+                            <DropdownMenuItem
+                              key={target}
+                              onClick={() =>
+                                handleMove(env, target, entry.name)
+                              }
+                            >
+                              <span
+                                className={`mr-2 inline-flex rounded px-1.5 py-0.5 text-xs font-semibold ${ENV_CLASS[target]}`}
+                              >
+                                {ENV_LABELS[target]}
+                              </span>
+                              {ENV_LABELS[target]}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  )}
+
                   {/* Package-level actions (depth === 1, dirs only) */}
                   {isPackageRow && (
-                    <div className="shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                       {isConfirmingDelete ? (
                         <>
                           <span className="text-xs text-muted-foreground">

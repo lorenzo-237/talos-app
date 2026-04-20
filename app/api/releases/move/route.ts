@@ -9,8 +9,16 @@ import type { Environment } from "@/types/build"
 const moveSchema = z.object({
   from: z.enum(["prod", "test", "dev"]),
   to: z.enum(["prod", "test", "dev"]),
-  version: z.string().min(1),
-  name: z.string().min(1).regex(/^[^/\\]+$/, "Nom de dossier invalide"),
+  version: z
+    .string()
+    .min(1)
+    .regex(/^[^/\\]+$/, "Version invalide"),
+  /** Omit to move the entire version folder */
+  name: z
+    .string()
+    .min(1)
+    .regex(/^[^/\\]+$/, "Nom de dossier invalide")
+    .optional(),
 })
 
 // ── POST /api/releases/move ───────────────────────────────────────────────────
@@ -28,7 +36,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const parsed = moveSchema.safeParse(body)
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Paramètres invalides", details: parsed.error.format() },
+      { error: "Paramètres invalides", details: parsed.error.issues },
       { status: 400 }
     )
   }
@@ -45,43 +53,108 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const srcDir = getOutputDir(from as Environment)
   const dstDir = getOutputDir(to as Environment)
 
-  const srcPath = path.resolve(srcDir, version, name)
-  const dstVersionDir = path.resolve(dstDir, version)
-  const dstPath = path.resolve(dstVersionDir, name)
+  // ── Move a single package ────────────────────────────────────────────────────
+  if (name !== undefined) {
+    const srcPath = path.resolve(srcDir, version, name)
+    const dstVersionDir = path.resolve(dstDir, version)
+    const dstPath = path.resolve(dstVersionDir, name)
 
-  // Path traversal guards
-  if (!srcPath.startsWith(path.resolve(srcDir) + path.sep)) {
-    return NextResponse.json({ error: "Chemin source invalide" }, { status: 400 })
+    if (!srcPath.startsWith(path.resolve(srcDir) + path.sep)) {
+      return NextResponse.json(
+        { error: "Chemin source invalide" },
+        { status: 400 }
+      )
+    }
+    if (!dstPath.startsWith(path.resolve(dstDir) + path.sep)) {
+      return NextResponse.json(
+        { error: "Chemin destination invalide" },
+        { status: 400 }
+      )
+    }
+
+    try {
+      const stat = await fs.stat(srcPath)
+      if (!stat.isDirectory()) {
+        return NextResponse.json(
+          { error: "La source n'est pas un dossier" },
+          { status: 400 }
+        )
+      }
+    } catch {
+      return NextResponse.json(
+        { error: "Dossier source introuvable" },
+        { status: 404 }
+      )
+    }
+
+    await fs.mkdir(dstVersionDir, { recursive: true })
+    const result = await moveDir(srcPath, dstPath)
+    if (result !== null) return result
+    return NextResponse.json({ ok: true })
   }
-  if (!dstPath.startsWith(path.resolve(dstDir) + path.sep)) {
+
+  // ── Move entire version folder (all packages inside) ────────────────────────
+  const srcVersionPath = path.resolve(srcDir, version)
+  const dstVersionPath = path.resolve(dstDir, version)
+
+  if (!srcVersionPath.startsWith(path.resolve(srcDir) + path.sep)) {
+    return NextResponse.json(
+      { error: "Chemin source invalide" },
+      { status: 400 }
+    )
+  }
+  if (!dstVersionPath.startsWith(path.resolve(dstDir) + path.sep)) {
     return NextResponse.json(
       { error: "Chemin destination invalide" },
       { status: 400 }
     )
   }
 
-  // Ensure source exists and is a directory
+  let packages: string[]
   try {
-    const stat = await fs.stat(srcPath)
-    if (!stat.isDirectory()) {
-      return NextResponse.json(
-        { error: "La source n'est pas un dossier" },
-        { status: 400 }
-      )
-    }
+    const entries = await fs.readdir(srcVersionPath, { withFileTypes: true })
+    packages = entries.filter((e) => e.isDirectory()).map((e) => e.name)
   } catch {
     return NextResponse.json(
-      { error: "Dossier source introuvable" },
+      { error: "Dossier version source introuvable" },
       { status: 404 }
     )
   }
 
-  // Ensure destination version directory exists
-  await fs.mkdir(dstVersionDir, { recursive: true })
+  if (packages.length === 0) {
+    return NextResponse.json(
+      { error: "Aucun package à déplacer dans cette version" },
+      { status: 400 }
+    )
+  }
 
-  // Try atomic rename first (same volume); fall back to recursive copy+delete
+  await fs.mkdir(dstVersionPath, { recursive: true })
+
+  for (const pkg of packages) {
+    const srcPkg = path.join(srcVersionPath, pkg)
+    const dstPkg = path.join(dstVersionPath, pkg)
+    const result = await moveDir(srcPkg, dstPkg)
+    if (result !== null) return result
+  }
+
+  // Remove source version dir if now empty
+  try {
+    await fs.rmdir(srcVersionPath)
+  } catch {
+    // Not empty or already gone — ignore
+  }
+
+  return NextResponse.json({ ok: true })
+}
+
+/** Move srcPath → dstPath. Returns a NextResponse on error, null on success. */
+async function moveDir(
+  srcPath: string,
+  dstPath: string
+): Promise<NextResponse | null> {
   try {
     await fs.rename(srcPath, dstPath)
+    return null
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code !== "EXDEV") {
       console.error("[POST /api/releases/move] rename failed", err)
@@ -95,8 +168,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     try {
       await copyDirRecursive(srcPath, dstPath)
       await fs.rm(srcPath, { recursive: true, force: true })
+      return null
     } catch (copyErr) {
-      await fs.rm(dstPath, { recursive: true, force: true }).catch(() => undefined)
+      await fs
+        .rm(dstPath, { recursive: true, force: true })
+        .catch(() => undefined)
       console.error("[POST /api/releases/move] copy+delete failed", copyErr)
       return NextResponse.json(
         { error: "Erreur lors du déplacement (cross-volume)" },
@@ -104,8 +180,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       )
     }
   }
-
-  return NextResponse.json({ ok: true })
 }
 
 async function copyDirRecursive(src: string, dst: string): Promise<void> {
