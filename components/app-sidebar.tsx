@@ -7,10 +7,12 @@ import {
   Hammer,
   FolderOpen,
   History,
-  Anvil,
   LogOut,
   ShieldCheck,
   Archive,
+  LayoutDashboard,
+  Layers,
+  Puzzle,
 } from "lucide-react"
 import {
   Sidebar,
@@ -18,6 +20,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -42,31 +45,33 @@ interface NavItem {
   right: keyof UserRights | null
 }
 
-const navItems: NavItem[] = [
-  { href: "/", label: "Build", icon: Hammer, right: null },
+interface NavGroup {
+  label: string
+  items: NavItem[]
+}
+
+const NAV_GROUPS: NavGroup[] = [
   {
-    href: "/packages",
-    label: "Packages",
-    icon: Package,
-    right: "canReadPackages",
+    label: "Construction",
+    items: [
+      { href: "/build", label: "Build", icon: Hammer, right: null },
+      { href: "/history", label: "Historique", icon: History, right: "canViewHistory" },
+      { href: "/releases", label: "Releases", icon: Archive, right: "canReadReleases" },
+    ],
   },
   {
-    href: "/explorer",
-    label: "Explorateur",
-    icon: FolderOpen,
-    right: "canReadExplorer",
+    label: "Ressources",
+    items: [
+      { href: "/packages", label: "Packages", icon: Package, right: "canReadPackages" },
+      { href: "/explorer", label: "Explorateur", icon: FolderOpen, right: "canReadExplorer" },
+    ],
   },
   {
-    href: "/history",
-    label: "Historique",
-    icon: History,
-    right: "canViewHistory",
-  },
-  {
-    href: "/releases",
-    label: "Releases",
-    icon: Archive,
-    right: "canReadReleases",
+    label: "Publication",
+    items: [
+      { href: "/logiciels", label: "Logiciels", icon: Layers, right: null },
+      { href: "/elements", label: "Éléments", icon: Puzzle, right: null },
+    ],
   },
 ]
 
@@ -74,38 +79,49 @@ export function AppSidebar() {
   const pathname = usePathname()
   const { user, loading, logout } = useAuth()
 
-  const visibleItems = navItems.filter(
-    (item) => item.right === null || (user?.rights[item.right] ?? false)
-  )
-
   const initials =
     user?.profile.initials ||
     user?.profile.uid?.slice(0, 2).toUpperCase() ||
     "?"
 
+  function isVisible(item: NavItem): boolean {
+    if (loading) return false
+    return item.right === null || (user?.rights[item.right] ?? false)
+  }
+
+  function isActive(href: string): boolean {
+    if (href === "/") return pathname === "/"
+    return pathname === href || pathname.startsWith(href + "/")
+  }
+
   return (
     <TooltipProvider>
       <Sidebar>
         <SidebarHeader className="border-b px-4 py-3">
-          <div className="flex items-center gap-2">
-            <Anvil className="size-5" />
+          <Link href="/" className="flex items-center gap-2">
+            <div className="flex size-6 items-center justify-center rounded bg-foreground text-background">
+              <LayoutDashboard className="size-3.5" />
+            </div>
             <span className="text-base font-semibold tracking-tight">
               Talos
             </span>
-          </div>
+          </Link>
         </SidebarHeader>
 
         <SidebarContent>
-          <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {loading
-                  ? null
-                  : visibleItems.map((item) => (
+          {NAV_GROUPS.map((group) => {
+            const visibleItems = group.items.filter(isVisible)
+            if (visibleItems.length === 0) return null
+            return (
+              <SidebarGroup key={group.label}>
+                <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {visibleItems.map((item) => (
                       <SidebarMenuItem key={item.href}>
                         <SidebarMenuButton
                           asChild
-                          isActive={pathname === item.href}
+                          isActive={isActive(item.href)}
                         >
                           <Link href={item.href}>
                             <item.icon className="size-4" />
@@ -114,13 +130,14 @@ export function AppSidebar() {
                         </SidebarMenuButton>
                       </SidebarMenuItem>
                     ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            )
+          })}
         </SidebarContent>
 
         <SidebarFooter className="gap-1">
-          {/* User info */}
           {user && (
             <>
               <div className="flex items-center gap-3 px-3 py-2">

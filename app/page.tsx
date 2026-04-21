@@ -1,27 +1,31 @@
 "use client"
 
 import * as React from "react"
-import { toast } from "sonner"
-import { Loader2, Search, X } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
+import Link from "next/link"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+  Hammer,
+  Archive,
+  Package,
+  FolderOpen,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Loader2,
+  Ban,
+  Clock,
+  ArrowRight,
+} from "lucide-react"
+import { Separator } from "@/components/ui/separator"
 import { useRights } from "@/contexts/auth-context"
-import { apiFetch } from "@/lib/api-fetch"
-import { useBuildStream } from "@/hooks/useBuildStream"
-import { usePackageSearch } from "@/hooks/usePackageSearch"
-import { PackageSelector } from "@/components/build/PackageSelector"
-import { BuildLogs } from "@/components/build/BuildLogs"
-import type { Environment } from "@/types/build"
+import type { BuildRecord, BuildStatus, Environment } from "@/types/build"
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const ENV_CLASS: Record<Environment, string> = {
+  prod: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
+  test: "bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300",
+  dev: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+}
 
 const ENV_LABELS: Record<Environment, string> = {
   prod: "PROD",
@@ -29,273 +33,202 @@ const ENV_LABELS: Record<Environment, string> = {
   dev: "DEV",
 }
 
-const ENV_RIGHT: Record<Environment, "canBuildProd" | "canBuildTest" | "canBuildDev"> = {
-  prod: "canBuildProd",
-  test: "canBuildTest",
-  dev: "canBuildDev",
+function StatusIcon({ status }: { status: BuildStatus }) {
+  switch (status) {
+    case "success":
+      return <CheckCircle2 className="size-4 text-green-500" />
+    case "error":
+      return <XCircle className="size-4 text-red-500" />
+    case "partial":
+      return <AlertTriangle className="size-4 text-yellow-500" />
+    case "cancelled":
+      return <Ban className="size-4 text-muted-foreground" />
+    case "running":
+      return <Loader2 className="size-4 animate-spin text-primary" />
+  }
 }
 
-export default function BuildPage() {
-  const [version, setVersion] = React.useState("")
-  const [selectedPackages, setSelectedPackages] = React.useState<Set<string>>(
-    new Set()
-  )
-  const [environment, setEnvironment] = React.useState<Environment>("test")
-  const [keepTemp, setKeepTemp] = React.useState(false)
+const STATUS_LABELS: Record<BuildStatus, string> = {
+  success: "Succès",
+  error: "Échec",
+  partial: "Partiel",
+  cancelled: "Annulé",
+  running: "En cours",
+}
 
+function formatRelative(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60_000)
+  if (mins < 1) return "À l'instant"
+  if (mins < 60) return `Il y a ${mins} min`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `Il y a ${hours} h`
+  const days = Math.floor(hours / 24)
+  return `Il y a ${days} j`
+}
+
+// ── Quick actions ─────────────────────────────────────────────────────────────
+
+interface QuickAction {
+  href: string
+  label: string
+  description: string
+  icon: React.ComponentType<{ className?: string }>
+  right: keyof ReturnType<typeof useRights> | null
+}
+
+const QUICK_ACTIONS: QuickAction[] = [
+  {
+    href: "/build",
+    label: "Nouveau build",
+    description: "Générer des packages depuis une version",
+    icon: Hammer,
+    right: null,
+  },
+  {
+    href: "/releases",
+    label: "Releases",
+    description: "Parcourir et déplacer les archives générées",
+    icon: Archive,
+    right: "canReadReleases",
+  },
+  {
+    href: "/packages",
+    label: "Packages",
+    description: "Éditer les définitions JSON",
+    icon: Package,
+    right: "canReadPackages",
+  },
+  {
+    href: "/explorer",
+    label: "Explorateur",
+    description: "Parcourir les fichiers source",
+    icon: FolderOpen,
+    right: "canReadExplorer",
+  },
+]
+
+// ── Main component ────────────────────────────────────────────────────────────
+
+export default function DashboardPage() {
   const rights = useRights()
-  const versionValid = /^\d+(\.\d+){2,3}$/.test(version.trim())
+  const [recentBuilds, setRecentBuilds] = React.useState<BuildRecord[]>([])
+  const [loading, setLoading] = React.useState(true)
 
-  // Environments the user is allowed to build in
-  const availableEnvs = (["prod", "test", "dev"] as Environment[]).filter(
-    (e) => rights[ENV_RIGHT[e]]
-  )
-  const canBuildInEnv = rights[ENV_RIGHT[environment]]
-
-  const {
-    logs,
-    progress,
-    buildDone,
-    hasErrors,
-    building,
-    activeBuild,
-    cancelRequested,
-    connectToStream,
-    resetBuild,
-    cancelActiveBuild,
-    setActiveBuild,
-    setBuilding,
-  } = useBuildStream()
-
-  const { packagesResult, searching, search } = usePackageSearch()
-
-  // When the stream reconnects on mount, restore the version input
   React.useEffect(() => {
-    if (activeBuild) {
-      setVersion(activeBuild.version)
-    }
-  }, [activeBuild])
-
-  // ─── Search ──────────────────────────────────────────────────────────────────
-  async function handleSearch() {
-    if (!versionValid) return
-    setSelectedPackages(new Set())
-    setBuilding(false)
-    setActiveBuild(null)
-    resetBuild()
-    const result = await search(version.trim())
-    // Auto-select all packages after a successful search
-    if (result) {
-      setSelectedPackages(new Set(result.packages.map((p) => p.name)))
-    }
-  }
-
-  // ─── Build ───────────────────────────────────────────────────────────────────
-  async function handleBuild() {
-    if (!packagesResult || selectedPackages.size === 0 || building) return
-
-    resetBuild()
-    setBuilding(true)
-
-    try {
-      const res = await apiFetch("/api/build", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          version: version.trim(),
-          packages: [...selectedPackages],
-          environment,
-          keepTemp,
-        }),
-      })
-
-      if (!res.ok) {
-        const data = (await res.json()) as { error: string }
-        toast.error(data.error ?? "Erreur lors du lancement du build")
-        setBuilding(false)
-        return
+    async function load() {
+      try {
+        const res = await fetch("/api/history")
+        if (!res.ok) return
+        const data = (await res.json()) as { builds: BuildRecord[] }
+        setRecentBuilds(data.builds.slice(0, 5))
+      } finally {
+        setLoading(false)
       }
-
-      const { buildId, resolvedVersion } = (await res.json()) as {
-        buildId: string
-        resolvedVersion: string
-      }
-
-      setActiveBuild({
-        buildId,
-        version: version.trim(),
-        resolvedVersion,
-        packages: [...selectedPackages],
-        startedAt: new Date().toISOString(),
-      })
-
-      connectToStream(buildId)
-    } catch {
-      toast.error("Erreur réseau")
-      setBuilding(false)
     }
-  }
+    if (rights.canViewHistory) load()
+    else setLoading(false)
+  }, [rights.canViewHistory])
 
-  // ─── Package selection helpers ────────────────────────────────────────────────
-  function togglePackage(name: string) {
-    setSelectedPackages((prev) => {
-      const next = new Set(prev)
-      if (next.has(name)) next.delete(name)
-      else next.add(name)
-      return next
-    })
-  }
+  const visibleActions = QUICK_ACTIONS.filter(
+    (a) => a.right === null || rights[a.right]
+  )
 
-  function selectAll() {
-    if (!packagesResult) return
-    setSelectedPackages(new Set(packagesResult.packages.map((p) => p.name)))
-  }
-
-  function deselectAll() {
-    setSelectedPackages(new Set())
-  }
-
-  // ─── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto max-w-2xl space-y-8">
+      {/* ── Header ──────────────────────────────────────────────────────────── */}
       <div>
-        <h1 className="text-xl font-semibold">Générer des packages</h1>
+        <h1 className="text-xl font-semibold">Tableau de bord</h1>
         <p className="text-sm text-muted-foreground">
-          Saisissez un numéro de version pour lister les packages disponibles.
+          Vue d'ensemble de l'activité Talos.
         </p>
       </div>
 
-      {/* ── Build in progress summary ──────────────────────────────────────── */}
-      {building && activeBuild ? (
-        <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin text-primary" />
-              <span className="text-sm font-medium">Build en cours…</span>
+      {/* ── Quick actions ────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-3">
+        {visibleActions.map((action) => (
+          <Link
+            key={action.href}
+            href={action.href}
+            className="group flex flex-col gap-2 rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50"
+          >
+            <div className="flex items-center justify-between">
+              <action.icon className="size-5 text-muted-foreground group-hover:text-foreground transition-colors" />
+              <ArrowRight className="size-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
-            {canBuildInEnv && (
-              <Button
-                variant="ghost"
-                size="xs"
-                onClick={cancelActiveBuild}
-                className="text-muted-foreground hover:text-destructive"
-                title="Annuler le build"
-              >
-                <X className="h-3.5 w-3.5" />
-                Annuler
-              </Button>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Version :</span>
-            <Badge variant="secondary">
-              {activeBuild.resolvedVersion !== activeBuild.version
-                ? `${activeBuild.version} → ${activeBuild.resolvedVersion}`
-                : activeBuild.version}
-            </Badge>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Packages :</span>
-            {activeBuild.packages.map((p) => (
-              <Badge key={p} variant="outline">
-                {p}
-              </Badge>
-            ))}
-          </div>
-
-          <p className="text-xs text-muted-foreground">
-            Démarré à{" "}
-            {new Date(activeBuild.startedAt).toLocaleTimeString("fr-FR")}
-          </p>
-
-          {cancelRequested && (
-            <p className="text-xs font-medium text-destructive">
-              Annulation demandée — le package en cours se terminera, les
-              suivants seront ignorés.
-            </p>
-          )}
-        </div>
-      ) : (
-        <>
-          {/* ── Version + environment form ───────────────────────────────────── */}
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="version">Version</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="version"
-                  placeholder="ex. 3.3.3.1"
-                  value={version}
-                  onChange={(e) => setVersion(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                  className="max-w-xs"
-                />
-                {rights.canReadPackages && (
-                  <Button
-                    onClick={handleSearch}
-                    disabled={!versionValid || searching}
-                  >
-                    {searching ? (
-                      <Loader2 className="animate-spin" />
-                    ) : (
-                      <Search />
-                    )}
-                    Rechercher
-                  </Button>
-                )}
-              </div>
+            <div>
+              <p className="text-sm font-medium leading-tight">{action.label}</p>
+              <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
+                {action.description}
+              </p>
             </div>
+          </Link>
+        ))}
+      </div>
 
-            {availableEnvs.length > 0 && (
-              <div className="space-y-2">
-                <Label htmlFor="environment">Environnement cible</Label>
-                <Select
-                  value={environment}
-                  onValueChange={(v) => setEnvironment(v as Environment)}
-                >
-                  <SelectTrigger id="environment" className="w-36">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableEnvs.map((e) => (
-                      <SelectItem key={e} value={e}>
-                        {ENV_LABELS[e]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </div>
-
-          {packagesResult && (
-            <PackageSelector
-              packagesResult={packagesResult}
-              selectedPackages={selectedPackages}
-              keepTemp={keepTemp}
-              building={building}
-              canBuild={canBuildInEnv}
-              onToggle={togglePackage}
-              onSelectAll={selectAll}
-              onDeselectAll={deselectAll}
-              onKeepTempChange={setKeepTemp}
-              onBuild={handleBuild}
-            />
-          )}
-        </>
-      )}
-
-      {logs.length > 0 && (
+      {/* ── Recent builds ────────────────────────────────────────────────────── */}
+      {rights.canViewHistory && (
         <>
           <Separator />
-          <BuildLogs
-            logs={logs}
-            progress={progress}
-            buildDone={buildDone}
-            hasErrors={hasErrors}
-          />
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-medium">Builds récents</h2>
+              <Link
+                href="/history"
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Voir tout
+                <ArrowRight className="size-3" />
+              </Link>
+            </div>
+
+            {loading ? (
+              <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" />
+                Chargement…
+              </div>
+            ) : recentBuilds.length === 0 ? (
+              <p className="py-4 text-sm text-muted-foreground">
+                Aucun build pour le moment.
+              </p>
+            ) : (
+              <div className="divide-y rounded-md border overflow-hidden">
+                {recentBuilds.map((build) => (
+                  <div
+                    key={build.buildId}
+                    className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/40 transition-colors"
+                  >
+                    <StatusIcon status={build.status} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">
+                          {build.version}
+                        </span>
+                        <span
+                          className={`inline-flex rounded px-1.5 py-0.5 text-xs font-semibold ${ENV_CLASS[build.environment]}`}
+                        >
+                          {ENV_LABELS[build.environment]}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-xs text-muted-foreground">
+                          {STATUS_LABELS[build.status]}
+                        </span>
+                        <span className="text-xs text-muted-foreground">·</span>
+                        <span className="text-xs text-muted-foreground truncate">
+                          {build.packages.join(", ")}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="shrink-0 flex items-center gap-1 text-xs text-muted-foreground">
+                      <Clock className="size-3" />
+                      {formatRelative(build.startedAt)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </>
       )}
     </div>
